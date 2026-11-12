@@ -1,0 +1,8 @@
+{
+  "name": "jogos-viagem",
+  "version": "1.0.0",
+  "description": "Jogos pra jogar com os amigos no mesmo Wi-Fi, sem internet",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "license": "MIT"
+}

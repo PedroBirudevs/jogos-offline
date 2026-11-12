@@ -1,0 +1,154 @@
+// Jogos de Viagem — servidor local, sem internet e sem dependências.
+// Rode com:  node server.js   (porta padrão 3000)
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
+const PORT = Number(process.env.PORT) || 3000;
+const PUB = path.join(__dirname, "public");
+
+const GAMES = {};
+for (const f of fs.readdirSync(path.join(__dirname, "games"))) {
+  if (f.endsWith(".js")) { const g = require("./games/" + f); GAMES[g.key] = g; }
+}
+
+// ---------------- Estado ----------------
+const players = new Map(); // id -> {id, name, conns:Set, lastSeen}
+const anon = new Map();    // res -> pid (ainda não entrou)
+let order = [];            // ordem de entrada
+let hostId = null;
+let game = null;           // {key, st}
+let lastResult = null;     // {titulo, linhas:[{nome, pontos}]}
+let timers = [];
+
+const now = () => Date.now();
+const online = (p) => p.conns.size > 0 || now() - p.lastSeen < 8000;
+const nameOf = (id) => (players.get(id) || {}).name || "?";
+
+function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+const ctx = {
+  now,
+  nameOf,
+  later(ms, fn) {
+    const t = setTimeout(() => { timers = timers.filter((x) => x !== t); try { fn(); } catch (e) { console.error(e); } broadcast(); }, ms);
+    timers.push(t);
+    return t;
+  },
+  cancel(t) { clearTimeout(t); timers = timers.filter((x) => x !== t); },
+  finish(resultado) { lastResult = resultado || null; },
+};
+
+function ensureHost() {
+  const h = players.get(hostId);
+  if (h && online(h)) return;
+  const next = order.map((id) => players.get(id)).find((p) => p && online(p));
+  if (next) hostId = next.id;
+}
+
+function stateFor(pid) {
+  ensureHost();
+  const g = game && GAMES[game.key];
+  let view = null;
+  if (g) { try { view = g.view(game.st, pid, ctx); } catch (e) { console.error(e); view = { erro: String(e.message) }; } }
+  return {
+    now: now(),
+    me: pid,
+    hostId,
+    players: order.map((id) => players.get(id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name, online: online(p) })),
+    jogos: Object.values(GAMES).map((g) => ({ key: g.key, nome: g.nome, emoji: g.emoji, desc: g.desc, min: g.min || 2, opcoes: g.opcoes || [] })),
+    game: g ? { key: game.key, nome: g.nome, emoji: g.emoji, view } : null,
+    lastResult,
+  };
+}
+
+function send(res, pid) { try { res.write("data: " + JSON.stringify(stateFor(pid)) + "\n\n"); } catch (e) {} }
+function broadcast() {
+  for (const p of players.values()) for (const res of p.conns) send(res, p.id);
+  for (const [res, id] of anon) { const p = players.get(id); if (p) { anon.delete(res); p.conns.add(res); } send(res, id); }
+}
+
+function act(pid, a) {
+  const p = players.get(pid);
+  if (a.type === "join") {
+    const name = String(a.name || "").trim().slice(0, 16);
+    if (!name) return "Digite um nome";
+    if ([...players.values()].some((x) => x.id !== pid && x.name.toLowerCase() === name.toLowerCase() && online(x))) return "Esse nome já está na sala";
+    if (p) p.name = name;
+    else { players.set(pid, { id: pid, name, conns: new Set(), lastSeen: now() }); order.push(pid); }
+    if (!hostId) hostId = pid;
+    return;
+  }
+  if (!p) return "Entre na sala primeiro";
+  p.lastSeen = now();
+  if (a.type === "leave") { for (const r of p.conns) anon.set(r, pid); players.delete(pid); order = order.filter((x) => x !== pid); if (hostId === pid) hostId = null; return; }
+  if (a.type === "start") {
+    const g = GAMES[a.key];
+    if (!g) return "Jogo não existe";
+    const list = order.map((id) => players.get(id)).filter((x) => x && online(x)).map((x) => ({ id: x.id, name: x.name }));
+    if (list.length < (g.min || 2)) return `Precisa de pelo menos ${g.min || 2} jogadores`;
+    clearTimers();
+    lastResult = null;
+    game = { key: g.key, st: g.init(list, a.opcoes || {}, ctx) };
+    return;
+  }
+  if (a.type === "lobby") { clearTimers(); game = null; return; }
+  if (a.type === "host") { hostId = pid; return; }
+  if (!game) return "Nenhum jogo rolando";
+  return GAMES[game.key].act(game.st, pid, a, ctx);
+}
+
+// ---------------- HTTP ----------------
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json", ".webmanifest": "application/manifest+json" };
+
+const server = http.createServer((req, res) => {
+  const u = new URL(req.url, "http://x");
+  if (u.pathname === "/events") {
+    const pid = String(u.searchParams.get("pid") || "");
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    res.write("retry: 1500\n\n");
+    const p = players.get(pid);
+    if (p) { p.conns.add(res); p.lastSeen = now(); } else anon.set(res, pid);
+    send(res, pid);
+    if (p) broadcast();
+    const ka = setInterval(() => { try { res.write(": ping\n\n"); } catch (e) {} }, 15000);
+    req.on("close", () => { clearInterval(ka); anon.delete(res); const q = players.get(pid); if (q) { q.conns.delete(res); q.lastSeen = now(); setTimeout(broadcast, 8500); } });
+    return;
+  }
+  if (u.pathname === "/api/act" && req.method === "POST") {
+    let body = "";
+    req.on("data", (d) => { body += d; if (body.length > 1e5) req.destroy(); });
+    req.on("end", () => {
+      let a = {};
+      try { a = JSON.parse(body || "{}"); } catch (e) {}
+      const pid = String(a.pid || "");
+      let erro;
+      try { erro = act(pid, a); } catch (e) { console.error(e); erro = "Erro: " + e.message; }
+      // reconecta o canal do jogador recém-entrado
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(erro ? { erro } : { ok: true }));
+      broadcast();
+    });
+    return;
+  }
+  let f = u.pathname === "/" ? "/index.html" : decodeURIComponent(u.pathname);
+  const fp = path.join(PUB, path.normalize(f).replace(/^(\.\.[\/\\])+/, ""));
+  if (!fp.startsWith(PUB)) { res.writeHead(403); return res.end(); }
+  fs.readFile(fp, (e, d) => {
+    if (e) { res.writeHead(404); return res.end("404"); }
+    res.writeHead(200, { "Content-Type": MIME[path.extname(fp)] || "application/octet-stream", "Cache-Control": "no-cache" });
+    res.end(d);
+  });
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  let ips = [];
+  try {
+    for (const list of Object.values(os.networkInterfaces())) for (const i of list || []) if (i.family === "IPv4" && !i.internal) ips.push(i.address);
+  } catch (e) {}
+  console.log("\n  🎮  JOGOS DE VIAGEM rodando!\n");
+  console.log("  Neste celular:   http://localhost:" + PORT);
+  if (ips.length) ips.forEach((ip) => console.log("  Para os amigos:  http://" + ip + ":" + PORT));
+  else console.log("  Para os amigos:  http://<IP do roteador>:" + PORT + "\n  (no celular dos amigos: Wi-Fi > detalhes da rede > 'Gateway' ou 'Roteador' = o IP)");
+  console.log("\n  Deixe esta tela aberta. Para parar: Ctrl+C\n");
+});

@@ -1,0 +1,369 @@
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  let pid = null;
+  try { pid = localStorage.getItem("jv_pid"); } catch (e) {}
+  if (!pid) { pid = Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem("jv_pid", pid); } catch (e) {} }
+
+  let S = null, off = 0, es = null;
+  const local = {}; // estado só deste celular (rascunhos)
+
+  function conectar() {
+    if (es) es.close();
+    es = new EventSource("/events?pid=" + encodeURIComponent(pid));
+    es.onmessage = (e) => { S = JSON.parse(e.data); off = S.now - Date.now(); render(); };
+    es.onerror = () => { const a = $("#app"); if (!S && a) a.innerHTML = `<div class="center muted" style="padding:40px">Procurando o jogo… confira se está no Wi-Fi certo.</div>`; };
+  }
+  async function send(a) {
+    try {
+      const r = await fetch("/api/act", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...a, pid }) });
+      const j = await r.json();
+      if (j.erro) toast(j.erro);
+      return j;
+    } catch (e) { toast("Sem conexão com o dono da sala"); return { erro: "rede" }; }
+  }
+  window.J = { send };
+  let tt;
+  function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("on"), 2200); }
+  const agora = () => Date.now() + off;
+  const seg = (fim) => Math.max(0, Math.ceil((fim - agora()) / 1000));
+  const timerHTML = (fim, total) => `<div class="row" style="margin:8px 0"><div class="bar grow"><i data-fim="${fim}" data-total="${total || 0}"></i></div><b class="timer" data-fim="${fim}">${seg(fim)}s</b></div>`;
+  setInterval(() => {
+    document.querySelectorAll(".timer[data-fim]").forEach((el) => (el.textContent = seg(+el.dataset.fim) + "s"));
+    document.querySelectorAll(".bar i[data-fim]").forEach((el) => { const t = +el.dataset.total; if (t) el.style.width = Math.max(0, Math.min(100, ((+el.dataset.fim - agora()) / t) * 100)) + "%"; });
+  }, 250);
+
+  const me = () => S && S.players.find((p) => p.id === pid);
+  const nome = (id) => ((S && S.players.find((p) => p.id === id)) || {}).name || "?";
+
+  // ---------- render com preservação de inputs ----------
+  let lastHTML = "";
+  function render() {
+    const html = !me() ? telaEntrar() : S.game ? telaJogo() : telaSala();
+    if (html === lastHTML) { HOOKS.length = 0; return; }
+    const app = $("#app");
+    const vals = {}; let foco = null, sel = null;
+    app.querySelectorAll("input[id]").forEach((i) => { if (i.type !== "range" || i.dataset.keep) vals[i.id] = i.value; });
+    if (document.activeElement && document.activeElement.id) { foco = document.activeElement.id; try { sel = [document.activeElement.selectionStart, document.activeElement.selectionEnd]; } catch (e) {} }
+    app.innerHTML = html; lastHTML = html;
+    for (const [id, v] of Object.entries(vals)) { const i = document.getElementById(id); if (i && !i.dataset.fresh) i.value = v; }
+    if (foco) { const i = document.getElementById(foco); if (i) { i.focus(); try { if (sel) i.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
+    bind();
+  }
+  // liga eventos por data-a="{json}"
+  function bind() {
+    document.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => { const a = JSON.parse(b.dataset.a); if (a.confirm && !confirm(a.confirm)) return; delete a.confirm; send(a); }));
+    document.querySelectorAll("[data-fn]").forEach((b) => (b.onclick = () => FN[b.dataset.fn](b)));
+    document.querySelectorAll("[data-in]").forEach((i) => (i.oninput = () => FN[i.dataset.in](i)));
+    const h = HOOKS.splice(0); h.forEach((f) => f());
+  }
+  const HOOKS = [];
+  const A = (o) => esc(JSON.stringify(o));
+  const FN = {};
+
+  // ---------- Entrar ----------
+  function telaEntrar() {
+    return `<div class="top"><div class="logo">Jogos de <span>Viagem</span></div></div>
+    <div class="card"><h2>Bora jogar! 🚗</h2><p class="muted">Todo mundo no mesmo Wi-Fi do celular do dono da sala. Não precisa de internet.</p>
+    <label class="l" for="nomeIn">Seu nome</label><input id="nomeIn" maxlength="16" placeholder="Ex.: Biru" autocomplete="off">
+    <div style="margin-top:12px"><button class="btn full" data-fn="entrar">Entrar na sala</button></div></div>
+    ${S && S.players.length ? `<div class="card"><div class="muted" style="margin-bottom:8px">Já estão na sala:</div><div class="row">${S.players.map((p) => `<span class="pill">${esc(p.name)}</span>`).join("")}</div></div>` : ""}`;
+  }
+  FN.entrar = async () => {
+    const n = $("#nomeIn").value.trim(); if (!n) return toast("Digite seu nome");
+    try { localStorage.setItem("jv_nome", n); } catch (e) {}
+    const r = await send({ type: "join", name: n }); if (!r.erro) conectar();
+  };
+
+  // ---------- Sala ----------
+  function telaSala() {
+    const lr = S.lastResult;
+    return `<div class="top"><div class="logo">Jogos de <span>Viagem</span></div><button class="btn sm alt" data-fn="sair">Sair</button></div>
+    <div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Na sala (${S.players.filter((p) => p.online).length})</b><small class="muted">👑 = dono da sala</small></div>
+      <div class="row">${S.players.map((p) => `<span class="pill ${p.online ? "" : "off"} ${p.id === pid ? "me" : ""}">${p.id === S.hostId ? "👑 " : ""}${esc(p.name)}</span>`).join("")}</div></div>
+    ${lr ? `<div class="card"><h3 style="margin-bottom:8px">${esc(lr.titulo)}</h3><div class="list">${(lr.linhas || []).map((l, i) => `<div class="li"><span>${i + 1}. ${esc(l.nome)}</span><b>${esc(l.pontos)}</b></div>`).join("")}</div></div>` : ""}
+    <h3 style="margin:16px 4px 10px">Escolha o jogo</h3>
+    <div class="games">${S.jogos.map((g) => `<button class="game" data-fn="abrir" data-k="${g.key}"><div class="e">${g.emoji}</div><b>${esc(g.nome)}</b><small>${esc(g.desc)}</small><small style="margin-top:6px">mín. ${g.min} jogadores</small></button>`).join("")}</div>`;
+  }
+  FN.sair = () => { if (confirm("Sair da sala?")) send({ type: "leave" }).then(() => { lastHTML = ""; conectar(); }); };
+  FN.abrir = (b) => {
+    const g = S.jogos.find((x) => x.key === b.dataset.k);
+    const m = $("#modal");
+    m.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h2>${g.emoji} ${esc(g.nome)}</h2><button class="btn sm alt" id="mx">✕</button></div>
+      <p class="muted">${esc(g.desc)}</p>
+      ${g.opcoes.map((o) => `<label class="l">${esc(o.nome)}</label><select id="op_${o.id}">${o.valores.map((v) => `<option ${v == o.padrao ? "selected" : ""}>${v}</option>`).join("")}</select>`).join("")}
+      <div style="margin-top:16px"><button class="btn full" id="mgo">Começar pra todo mundo</button></div></div>`;
+    m.classList.remove("hide");
+    $("#mx").onclick = () => m.classList.add("hide");
+    m.onclick = (e) => { if (e.target === m) m.classList.add("hide"); };
+    $("#mgo").onclick = async () => {
+      const opcoes = {}; g.opcoes.forEach((o) => (opcoes[o.id] = $("#op_" + o.id).value));
+      const r = await send({ type: "start", key: g.key, opcoes });
+      if (!r.erro) m.classList.add("hide");
+    };
+  };
+
+  // ---------- Jogo ----------
+  function telaJogo() {
+    const g = S.game, v = g.view || {};
+    const corpo = (R[g.key] || (() => "<div class='card'>?</div>"))(v);
+    return `<div class="top"><div class="logo">${g.emoji} ${esc(g.nome)}</div><button class="btn sm alt" data-a='${A({ type: "lobby", confirm: "Encerrar o jogo pra todo mundo e voltar pra sala?" })}'>Sair do jogo</button></div>${corpo}`;
+  }
+  const placarHTML = (pl, titulo) => `<div class="card"><b>${titulo || "Placar"}</b><div class="list" style="margin-top:8px">${pl.map((x, i) => `<div class="li ${x.id === pid ? "hl" : ""}"><span>${i + 1}. ${esc(x.nome)}</span><b>${x.pts}</b></div>`).join("")}</div></div>`;
+  const voltar = `<button class="btn full" data-a='${A({ type: "lobby" })}'>Voltar pra sala</button>`;
+  const R = {};
+
+  // ===== LEILÃO =====
+  const brl = (n) => n + "M";
+  const ini = (n) => String(n).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const tier = (o) => (o >= 75 ? "gold" : o >= 65 ? "silver" : "bronze");
+  const LAB = { GOL: ["ELA", "MAN", "CHU", "REF", "VEL", "POS"], X: ["RIT", "CHU", "PAS", "DRI", "DEF", "FÍS"] };
+  const cardHTML = (j) => {
+    const lab = j.grupo === "GOL" ? LAB.GOL : LAB.X, vals = [j.pac, j.sho, j.pas, j.dri, j.def, j.phy];
+    return `<div class="fut ${tier(j.ovr)}">
+      <div class="fut-top"><div class="fut-l"><div class="fut-ovr">${j.ovr}</div><div class="fut-pos">${esc(j.pos)}</div><div class="fut-flag">${j.flag}</div></div>
+        <div class="fut-av">${esc(ini(j.nome))}</div></div>
+      <div class="fut-nome">${esc(j.nome)}</div>
+      <div class="fut-clube">${esc(j.clube)}${j.liga && j.liga !== "Top 100" ? " · " + esc(j.liga) : ""}</div>
+      <div class="fut-st">${lab.map((l, i) => `<div><b>${vals[i]}</b><span>${l}</span></div>`).join("")}</div>
+      ${j.aprox ? `<div class="fut-aprox">overall aproximado</div>` : ""}</div>`;
+  };
+  const ORD = { GOL: 0, DEF: 1, MEI: 2, ATA: 3 };
+  const faltaTxt = (f) => Object.entries(f).filter(([, n]) => n > 0).map(([g, n]) => `${n} ${g}`).join(", ");
+  const teamHTML = (t, n) => `<div class="team ${t.id === pid ? "mine" : ""}"><div class="row" style="justify-content:space-between"><b>${esc(t.nome)}${t.id === pid ? " (você)" : ""}</b><span class="tag">💰 ${brl(t.dinheiro)}</span></div>
+    <div class="muted" style="font-size:12px;margin:2px 0 4px">${t.elenco.length}/${n} · ATQ ${t.r.ataque} · DEF ${t.r.defesa} · GERAL ${t.r.geral}${faltaTxt(t.falta) ? ` · falta: ${faltaTxt(t.falta)}` : ""}</div>
+    ${[...t.elenco].sort((a, b) => ORD[a.grupo] - ORD[b.grupo]).map((j) => `<div class="j"><span><span class="mini ${tier(j.ovr)}">${j.ovr}</span> ${j.flag} ${esc(j.nome)} <small class="muted">${esc(j.pos)}${j.preco ? " · " + j.preco + "M" : ""}</small></span></div>`).join("")}</div>`;
+  const agrupa = (l) => { const c = {}; l.forEach((x) => (c[x.nome] = (c[x.nome] || 0) + 1)); return Object.entries(c).map(([n, k]) => esc(n) + (k > 1 ? " " + k : "")).join(", "); };
+  const jogoHTML = (g, nomeT) => `<div class="jogo"><span class="t">${esc(nomeT(g.a))}</span><span class="placar">${g.ga} x ${g.gb}</span><span class="t r">${esc(nomeT(g.b))}</span></div>
+    ${g.golsA.length || g.golsB.length || g.pen ? `<div class="gols">${g.golsA.length ? "⚽ " + agrupa(g.golsA) : ""}${g.golsA.length && g.golsB.length ? " · " : ""}${g.golsB.length ? "⚽ " + agrupa(g.golsB) : ""}${g.pen ? `<br>Pênaltis: ${g.pen[0]} x ${g.pen[1]}` : ""}</div>` : ""}`;
+  R.leilao = (v) => {
+    const nomeT = (id) => (v.times.find((t) => t.id === id) || {}).nome;
+    const meu = v.times.find((t) => t.id === pid);
+    const timesHTML = `<div class="list">${[...v.times].sort((a, b) => (a.id === pid ? -1 : b.id === pid ? 1 : 0)).map((t) => teamHTML(t, v.n)).join("")}</div>`;
+    if (v.fase === "leilao" && v.lote) {
+      const L = v.lote, j = L.j;
+      let acoes = "";
+      if (!meu) acoes = `<p class="muted center">Você está só assistindo</p>`;
+      else if (v.cheio) acoes = `<p class="muted center">Seu time está completo ✅</p>`;
+      else if (L.vendido) acoes = "";
+      else if (!v.precisoDessa) acoes = `<p class="muted center">Você já tem todos os ${j.grupo} que precisa</p>`;
+      else if (L.lider === pid) acoes = `<div class="center"><b style="color:var(--ac);font-size:20px">Você está ganhando! 🔥</b></div>`;
+      else if (!L.lider) acoes = `<button class="btn huge full" data-a='${A({ type: "lance", inc: 0 })}' ${v.meuMax < L.preco ? "disabled" : ""}>Pegar por ${brl(L.preco)}</button>`;
+      else acoes = `<div class="row">${[1, 5, 10].map((i) => `<button class="btn grow" style="font-size:22px;padding:18px" data-a='${A({ type: "lance", inc: i })}' ${v.meuMax < L.preco + i ? "disabled" : ""}>+${i}</button>`).join("")}</div>`;
+      if (meu && !v.cheio && !L.vendido && L.lider !== pid && v.precisoDessa) acoes += `<button class="btn alt full" style="margin-top:8px" data-a='${A({ type: "passar" })}' ${L.passei ? "disabled" : ""}>${L.passei ? "Você passou" : "Passar"}</button>`;
+      return `<div class="muted center" style="font-size:13px;margin-bottom:6px">${esc(v.base)} · ${v.restantes} jogadores na fila</div>
+        ${cardHTML(j)}
+        <div class="card center" style="margin-top:10px;padding:12px">
+          <div class="muted">${L.vendido ? (L.lider ? "VENDIDO para" : "Ninguém quis") : L.lider ? "Maior lance" : "Lance inicial"}</div>
+          <div class="preco">${L.vendido && !L.lider ? "—" : brl(L.preco)}</div>
+          ${L.lider ? `<div style="font-weight:800">${esc(L.liderNome)}</div>` : ""}
+          ${L.vendido ? "" : timerHTML(L.fim, v.tempo)}
+        </div>
+        <div style="margin:10px 0">${acoes}</div>
+        ${meu ? `<div class="muted center" style="margin-bottom:10px">Seu dinheiro: <b style="color:var(--txt)">${brl(meu.dinheiro)}</b> · lance máx.: <b style="color:var(--txt)">${brl(Math.max(0, v.meuMax))}</b></div>` : ""}
+        ${v.log.length ? `<div class="card"><div class="list">${v.log.map((l) => `<div class="muted" style="font-size:14px">• ${esc(l)}</div>`).join("")}</div></div>` : ""}
+        ${timesHTML}`;
+    }
+    if (v.fase === "times") {
+      return `<div class="card center"><h2>Times montados! ⚽</h2><p class="muted">Pontos corridos ida e volta, simulado pelos atributos de cada jogador. Depois ${v.times.length >= 4 ? "semifinal e final" : "a final entre os 2 melhores"}.</p>
+        <button class="btn full" data-a='${A({ type: "campeonato" })}'>Começar campeonato</button></div>` + timesHTML;
+    }
+    const tab = v.tabela ? `<div class="card" style="padding:10px"><table><tr><th>#</th><th>Time</th><th class="n">P</th><th class="n">J</th><th class="n">V</th><th class="n">E</th><th class="n">D</th><th class="n">SG</th></tr>
+      ${v.tabela.map((t, i) => `<tr style="${t.id === pid ? "color:var(--ac)" : ""}"><td>${i + 1}</td><td><b>${esc(t.nome)}</b></td><td class="n"><b>${t.pts}</b></td><td class="n">${t.j}</td><td class="n">${t.v}</td><td class="n">${t.e}</td><td class="n">${t.d}</td><td class="n">${t.sg}</td></tr>`).join("")}</table></div>` : "";
+    const art = v.artilharia && v.artilharia.length ? `<div class="card"><b>⚽ Artilharia</b><div class="list" style="margin-top:8px">${v.artilharia.map((a, i) => `<div class="li"><span>${i + 1}. ${esc(a.nome)} <small class="muted">${esc(a.time)}</small></span><b>${a.gols}</b></div>`).join("")}</div></div>` : "";
+    if (v.fase === "liga") {
+      const ult = v.rodada >= v.totalRodadas;
+      return `<div class="card"><div class="row" style="justify-content:space-between"><h2>Rodada ${v.rodada}/${v.totalRodadas}</h2><span class="tag">${v.rodada > v.totalRodadas / 2 ? "Volta" : "Ida"}</span></div><div style="margin-top:10px">${v.resultados.map((g) => jogoHTML(g, nomeT)).join("")}</div>
+        <button class="btn full" data-a='${A({ type: "avancar" })}'>${ult ? "Ir pro mata-mata 🏆" : "Próxima rodada"}</button></div>${tab}${art}`;
+    }
+    if (v.fase === "mata" || v.fase === "fim") {
+      let h = "";
+      if (v.resSemis) h += `<div class="card"><h2>Semifinais</h2><div style="margin-top:10px">${v.resSemis.map((g) => jogoHTML(g, nomeT)).join("")}</div></div>`;
+      if (v.resFinal) h += `<div class="card" style="border-color:var(--gold)"><h2>🏆 Final</h2><div style="margin-top:10px">${jogoHTML(v.resFinal, nomeT)}</div><div class="center" style="font-size:26px;font-weight:900;color:var(--gold);margin-top:8px">${esc(nomeT(v.campeao))} é CAMPEÃO!</div></div>`;
+      else {
+        const prox = v.etapa === "semis" && !v.resSemis ? v.chave.semis.map(([a, b]) => `${esc(nomeT(a))} x ${esc(nomeT(b))}`).join("<br>") : v.chave.final && v.chave.final[0] ? `${esc(nomeT(v.chave.final[0]))} x ${esc(nomeT(v.chave.final[1]))}` : "";
+        h += `<div class="card"><h2>${v.etapa === "semis" && !v.resSemis ? "Semifinais" : "🏆 Final"}</h2><p>${prox}</p><button class="btn full" data-a='${A({ type: "avancar" })}'>${v.etapa === "semis" && !v.resSemis ? "Jogar semifinais" : "Jogar a final"}</button></div>`;
+      }
+      if (v.fase === "fim") h += voltar;
+      return h + tab + art;
+    }
+    return `<div class="card">Carregando…</div>`;
+  };
+
+  // ===== SINTONIA =====
+  function dialSVG(alvo, agulha, chutes, revela) {
+    const ang = (v) => Math.PI - (v / 100) * Math.PI; // 0 = esquerda, 100 = direita
+    const pt = (v, r) => [200 + r * Math.cos(ang(v)), 200 - r * Math.sin(ang(v))];
+    const fatia = (a, b, cor) => { const [x1, y1] = pt(Math.max(0, a), 180), [x2, y2] = pt(Math.min(100, b), 180); return `<path d="M200 200 L${x1} ${y1} A180 180 0 0 1 ${x2} ${y2} Z" fill="${cor}"/>`; };
+    let zonas = "";
+    if (alvo !== null && alvo !== undefined) zonas = fatia(alvo - 15, alvo + 15, "#ffcf3f55") + fatia(alvo - 9, alvo + 9, "#ff6b2c99") + fatia(alvo - 4, alvo + 4, "#c6ff3d");
+    const marcas = (chutes || []).map((c) => { const [x, y] = pt(c.v, 150); return `<circle cx="${x}" cy="${y}" r="9" fill="#4cc3ff" stroke="#111" stroke-width="2"/><text x="${x}" y="${y - 14}" fill="#fff" font-size="13" font-weight="800" text-anchor="middle">${esc(c.nome.slice(0, 8))}</text>`; }).join("");
+    const rot = agulha === null || agulha === undefined ? -90 : (agulha / 100) * 180 - 90;
+    return `<svg class="dial" viewBox="0 0 400 215"><path d="M20 200 A180 180 0 0 1 380 200 Z" fill="#24242d" stroke="#33333e" stroke-width="2"/>${zonas}${marcas}
+      ${agulha === null || agulha === undefined ? "" : `<g class="needle" style="transform:rotate(${rot}deg)"><line x1="200" y1="200" x2="200" y2="40" stroke="#fff" stroke-width="5" stroke-linecap="round"/></g>`}
+      <circle cx="200" cy="200" r="12" fill="#fff"/></svg>`;
+  }
+  FN.slider = (i) => { local.sint = +i.value; const g = document.querySelector(".needle"); if (g) g.style.transform = `rotate(${(i.value / 100) * 180 - 90}deg)`; };
+  R.sintonia = (v) => {
+    const spec = `<div class="spec"><span>⬅ ${esc(v.carta[0])}</span><span>${esc(v.carta[1])} ➡</span></div>`;
+    const head = `<div class="row muted" style="justify-content:space-between;margin-bottom:8px"><span>Rodada ${v.rodada}/${v.total}</span><span>Quem dá a dica: <b style="color:var(--txt)">${esc(v.videnteNome)}</b></span></div>`;
+    if (v.fase === "fim") return placarHTML(v.placar, "🎯 Resultado final") + voltar;
+    if (v.fase === "girar") {
+      if (v.souVidente) return head + `<div class="card center">${spec}${dialSVG(null, null)}<p>Sua vez! Gire a roleta. Só você vai ver onde parou.</p>
+        <button class="btn huge full" data-a='${A({ type: "girar" })}'>🎡 Girar roleta</button><button class="btn alt sm" style="margin-top:8px" data-a='${A({ type: "trocar" })}'>Trocar tema</button></div>` + placarHTML(v.placar);
+      return head + `<div class="card center">${spec}${dialSVG(null, null)}<p class="muted">${esc(v.videnteNome)} está girando a roleta…</p></div>` + placarHTML(v.placar);
+    }
+    if (v.fase === "dica") {
+      if (v.souVidente) {
+        const primeira = local.girou !== v.rodada;
+        if (primeira) { local.girou = v.rodada; HOOKS.push(() => setTimeout(() => { const n = document.querySelector(".needle"); if (n) n.style.transform = `rotate(${(v.alvo / 100) * 180 - 90}deg)`; }, 80)); }
+        return head + `<div class="card">${spec}${dialSVG(v.alvo, primeira ? 0 : v.alvo, null)}
+          <p class="center muted">Parou no <b style="color:var(--txt)">${v.alvo}</b>. Dê uma dica que leve a galera até aí (pode falar em voz alta também).</p>
+          <input id="dicaIn" maxlength="60" placeholder="Ex.: Pastel de feira" autocomplete="off"><div style="margin-top:8px"><button class="btn full" data-fn="enviarDica">Mandar dica</button></div>
+          <button class="btn alt sm" style="margin-top:8px" data-a='${A({ type: "trocar" })}'>Trocar tema</button></div>`;
+      }
+      return head + `<div class="card center">${spec}${dialSVG(null, null)}<p class="muted">${esc(v.videnteNome)} está pensando na dica… 🤔</p></div>`;
+    }
+    if (v.fase === "chute") {
+      if (v.souVidente || !v.jogando) return head + `<div class="card center">${spec}<h2 style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(v.souVidente ? v.alvo : null, null)}<p class="muted">${v.enviaram}/${v.precisam} chutaram</p>
+        <button class="btn alt sm" data-a='${A({ type: "revelar" })}'>Revelar agora</button></div>`;
+      const val = v.meuChute ?? local.sint ?? 50;
+      return head + `<div class="card">${spec}<h2 class="center" style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(null, val)}
+        <input type="range" id="sintR" min="0" max="100" value="${val}" data-in="slider">
+        <button class="btn full" data-fn="chutar">${v.meuChute !== undefined ? "Mudar chute" : "Confirmar chute"}</button>
+        <p class="muted center">${v.meuChute !== undefined ? "Chute enviado ✅ · " : ""}${v.enviaram}/${v.precisam} chutaram</p></div>`;
+    }
+    if (v.fase === "revela") {
+      return head + `<div class="card">${spec}<h2 class="center" style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(v.alvo, v.alvo, v.chutes, true)}
+        <div class="list">${v.chutes.map((c) => `<div class="li"><span>${esc(c.nome)} chutou ${c.v}</span><b>+${c.g}</b></div>`).join("")}
+        <div class="li"><span>${esc(v.videnteNome)} (dica)</span><b>+${v.ganhoVidente}</b></div></div>
+        <button class="btn full" style="margin-top:10px" data-a='${A({ type: "proxima" })}'>${v.rodada >= v.total ? "Ver resultado" : "Próxima rodada"}</button></div>` + placarHTML(v.placar);
+    }
+    return "";
+  };
+  FN.enviarDica = () => { const d = $("#dicaIn").value.trim(); if (!d) return toast("Escreva a dica"); send({ type: "dica", dica: d }); };
+  FN.chutar = () => { const r = $("#sintR"); send({ type: "chute", valor: +r.value }); };
+
+  // ===== IMPOSTOR =====
+  R.impostor = (v) => {
+    if (v.fase === "encerrado") return placarHTML(v.placar, "🕵️ Resultado") + voltar;
+    if (!v.jogando) return `<div class="card center muted">Rodada em andamento. Você entra na próxima partida.</div>`;
+    if (v.fase === "palavra") {
+      const show = local.ver === v.rodada;
+      return `<div class="card center"><div class="muted">Rodada ${v.rodada}</div>
+        ${show ? (v.souImp ? `<div class="secret imp">VOCÊ É O IMPOSTOR 🤫</div>${v.cat ? `<p class="muted">Categoria: <b style="color:var(--txt)">${esc(v.cat)}</b></p>` : ""}<p>Finja que sabe a palavra!</p>` : `<div class="secret">${esc(v.palavra)}</div><p class="muted">Categoria: ${esc(v.cat)}</p>`)
+          : `<div class="secret" style="font-size:22px">Toque pra ver sua palavra<br><small class="muted">(esconda a tela!)</small></div>`}
+        <button class="btn alt full" style="margin-top:10px" data-fn="verPalavra">${show ? "Esconder" : "Ver minha palavra"}</button></div>
+        <div class="card"><b>Como jogar</b><p class="muted" style="margin:6px 0">Começando por <b style="color:var(--txt)">${esc(v.comeca)}</b>, cada um fala UMA palavra relacionada, sem entregar demais. Deem 1 ou 2 voltas e depois votem.</p>
+        <button class="btn full" data-a='${A({ type: "votacao" })}'>Ir pra votação</button></div>` + placarHTML(v.placar);
+    }
+    if (v.fase === "votacao") {
+      return `<div class="card"><h2>Quem é o impostor?</h2><p class="muted">${v.votaram}/${v.jogadores.length} votaram</p>
+        <div class="vote">${v.jogadores.filter((j) => j.id !== pid).map((j) => `<button class="btn alt ${v.meuVoto === j.id ? "sel" : ""}" data-a='${A({ type: "voto", alvo: j.id })}'>${esc(j.nome)}${j.votou ? " ✓" : ""}</button>`).join("")}</div>
+        <button class="btn sm alt" style="margin-top:10px" data-a='${A({ type: "apurar" })}'>Apurar agora</button></div>`;
+    }
+    if (v.fase === "chuteImpostor") {
+      return `<div class="card center"><h2>Pegaram ${esc(v.eliminado)}! 🎯</h2><p>Mas o impostor ainda pode ganhar se acertar a palavra.</p>
+        ${v.souImp ? `<input id="chuteImp" placeholder="Qual era a palavra?" autocomplete="off"><div style="margin-top:8px"><button class="btn full" data-fn="chuteImp">Chutar</button></div>` : `<p class="muted">Esperando o impostor chutar…</p>`}</div>`;
+    }
+    if (v.fase === "fim") {
+      const ganhei = (v.venc === "impostor") === v.souImp;
+      return `<div class="card center"><div style="font-size:50px">${ganhei ? "🎉" : "😵"}</div><h2>${v.venc === "impostor" ? "Impostor venceu!" : "Vocês acharam o impostor!"}</h2>
+        <p class="muted">${esc(v.motivo)}</p><p>Impostor: <b>${v.impostores.map(esc).join(", ")}</b><br>Palavra: <b>${esc(v.palavra)}</b> <span class="muted">(${esc(v.cat)})</span></p>
+        <div class="row"><button class="btn grow" data-a='${A({ type: "proxima" })}'>Nova rodada</button><button class="btn alt grow" data-a='${A({ type: "encerrar" })}'>Encerrar</button></div></div>` + placarHTML(v.placar);
+    }
+    return "";
+  };
+  FN.verPalavra = () => { local.ver = local.ver === S.game.view.rodada ? null : S.game.view.rodada; lastHTML = ""; render(); };
+  FN.chuteImp = () => send({ type: "chute", texto: $("#chuteImp").value });
+
+  // ===== TABU =====
+  R.tabu = (v) => {
+    const times = `<div class="card"><div class="row" style="justify-content:space-around;text-align:center">
+      <div><div class="teamA" style="font-weight:900">TIME A</div><div style="font-size:34px;font-weight:900">${v.placar.A}</div><small class="muted">${v.A.map(esc).join(", ")}</small></div>
+      <div><div class="teamB" style="font-weight:900">TIME B</div><div style="font-size:34px;font-weight:900">${v.placar.B}</div><small class="muted">${v.B.map(esc).join(", ")}</small></div></div>
+      ${v.meuTime ? `<p class="center muted" style="margin:8px 0 0">Você é do <b class="team${v.meuTime}">Time ${v.meuTime}</b></p>` : ""}</div>`;
+    const lista = v.lista.length ? `<div class="card"><div class="row">${v.lista.map((x) => `<span class="pill">${x.r} ${esc(x.p)}</span>`).join("")}</div></div>` : "";
+    if (v.fase === "fim") return times + voltar;
+    if (v.fase === "pronto") {
+      return `<div class="card center"><div class="muted">Vez ${v.vez}/${v.total}</div><h2 style="margin:8px 0">${v.souExp ? "Sua vez de explicar! 🗣️" : `${esc(v.expNome)} vai explicar`}</h2>
+        <p class="muted">Time <b class="team${v.timeExp}">${v.timeExp}</b> adivinha. ${v.fiscal ? "Você é fiscal: se ele falar uma palavra proibida, aperte o botão!" : ""}</p>
+        ${v.souExp ? `<button class="btn huge full" data-a='${A({ type: "comecar" })}'>Começar</button>` : ""}</div>` + times;
+    }
+    if (v.fase === "jogando") {
+      if (v.souExp) return `${timerHTML(v.fim, 60000)}<div class="tabu"><div class="w">${esc(v.carta[0])}</div>${v.carta.slice(1).map((p) => `<div class="p">${esc(p)}</div>`).join("")}</div>
+        <div class="row" style="margin-top:12px"><button class="btn green huge grow" data-a='${A({ type: "acertou" })}'>✅ Acertou</button></div>
+        <div class="row" style="margin-top:8px"><button class="btn alt grow" data-a='${A({ type: "pular" })}'>⏭ Pular</button><button class="btn red grow" data-a='${A({ type: "proibida" })}'>🚫 Falei proibida</button></div>` + lista + times;
+      if (v.fiscal) return `${timerHTML(v.fim, 60000)}<div class="tabu"><div class="w">${esc(v.carta[0])}</div>${v.carta.slice(1).map((p) => `<div class="p">${esc(p)}</div>`).join("")}</div>
+        <button class="btn red huge full" style="margin-top:12px" data-a='${A({ type: "proibida" })}'>🚫 FALOU PROIBIDA!</button>` + lista + times;
+      return `${timerHTML(v.fim, 60000)}<div class="card center"><div style="font-size:60px">🤔</div><h2>Adivinha!</h2><p class="muted">${esc(v.expNome)} está explicando. Grite a resposta!</p></div>` + lista + times;
+    }
+    if (v.fase === "resumo") return `<div class="card center"><h2>Tempo! ⏰</h2><p class="muted">${esc(v.expNome)} fez ${v.lista.filter((x) => x.r === "✅").length} acertos</p>
+      <button class="btn full" data-a='${A({ type: "proxima" })}'>Próxima vez</button></div>` + lista + times;
+    return "";
+  };
+
+  // ===== STOP =====
+  let stopT;
+  FN.stopIn = () => { clearTimeout(stopT); stopT = setTimeout(() => send({ type: "resp", resp: lerStop() }), 500); };
+  const lerStop = () => S.game.view.cats.map((_, i) => ($("#st" + i) || {}).value || "");
+  FN.darStop = () => send({ type: "stop", resp: lerStop() });
+  R.stop = (v) => {
+    const pl = placarHTML(v.placar);
+    if (v.fase === "fim") return placarHTML(v.placar, "✋ Resultado final") + voltar;
+    if (!v.jogando) return `<div class="card center muted">Rodada em andamento.</div>` + pl;
+    if (v.fase === "contagem") return `<div class="card center"><div class="muted">Rodada ${v.r}/${v.rodadas}</div><div class="letra">?</div><p>Sorteando a letra… <b class="timer" data-fim="${v.fim}"></b></p></div>` + pl;
+    if (v.fase === "escrevendo" || v.fase === "parou") {
+      const trava = v.fase === "parou";
+      if (local.stopR !== v.r) { local.stopR = v.r; HOOKS.push(() => v.cats.forEach((_, i) => { const el = $("#st" + i); if (el) el.value = ""; })); }
+      return `<div class="card"><div class="row" style="justify-content:space-between"><span class="muted">Rodada ${v.r}/${v.rodadas}</span>${trava ? `<b style="color:var(--red)">STOP! ${esc(v.quemParou || "Tempo")} — <span class="timer" data-fim="${v.fim}"></span></b>` : `<span>⏱ <b class="timer" data-fim="${v.fim}"></b></span>`}</div>
+        <div class="letra">${v.letra}</div>
+        ${v.cats.map((c, i) => `<div class="ans"><label class="l" for="st${i}">${esc(c)}</label><input id="st${i}" data-in="stopIn" autocomplete="off" autocapitalize="words" placeholder="${v.letra}…"></div>`).join("")}
+        <button class="btn red huge full" style="margin-top:12px" data-fn="darStop" ${trava ? "disabled" : ""}>✋ STOP!</button></div>`;
+    }
+    if (v.fase === "correcao") {
+      return `<div class="card"><div class="row" style="justify-content:space-between"><h2>Correção — letra ${v.letra}</h2></div><p class="muted" style="margin:4px 0 0">Toque numa resposta errada dos outros pra anular. Igual = 5, única = 10.</p></div>
+        ${v.tabela.map((t) => `<div class="card"><b>${esc(t.cat)}</b>${t.linhas.map((l) => `<div class="cell ${l.pts === 0 ? "inv" : ""} ${l.eu ? "mark" : ""}" ${l.id !== pid ? `data-a='${A({ type: "marcar", alvo: l.id, c: v.tabela.indexOf(t) })}'` : ""}><span><small class="muted">${esc(l.nome)}:</small> ${esc(l.txt) || "—"}</span><span>${l.marcas ? `<small style="color:var(--red)">❌${l.marcas}</small> ` : ""}<span class="pt">${l.pts}</span></span></div>`).join("")}</div>`).join("")}
+        <div class="card"><b>Pontos da rodada</b><div class="list" style="margin-top:6px">${Object.entries(v.rodadaPts).map(([id, p]) => `<div class="li"><span>${esc(nome(id))}</span><b>+${p}</b></div>`).join("")}</div></div>
+        <button class="btn full" data-a='${A({ type: "proxima" })}'>${v.r >= v.rodadas ? "Ver resultado" : "Próxima rodada"}</button>` + pl;
+    }
+    return "";
+  };
+
+  // ===== DUVIDO =====
+  FN.lance = () => { const n = +$("#lanceIn").value; send({ type: "lance", n }); };
+  FN.maisUm = (b) => { const i = $("#lanceIn"); i.value = Math.max(+i.value || 0, +b.dataset.min) + 0; };
+  R.duvido = (v) => {
+    const head = `<div class="card center"><div class="muted">Rodada ${v.r}/${v.rodadas}</div><h2 style="margin:6px 0;font-size:26px">${esc(v.cat)}</h2></div>`;
+    if (v.fase === "fim") return placarHTML(v.placar, "🤨 Resultado final") + voltar;
+    if (v.fase === "lances") {
+      const atual = v.lance ? `<div class="num">${v.lance}</div><p class="center muted">${esc(v.donoNome)} diz que consegue falar ${v.lance}</p>` : `<p class="center muted">Ninguém deu lance ainda</p>`;
+      if (!v.minhaVez) return head + `<div class="card">${atual}<p class="center">Vez de <b>${esc(v.vezNome)}</b>: aumentar ou duvidar</p></div>` + placarHTML(v.placar);
+      const min = v.lance + 1;
+      return head + `<div class="card">${atual}<p class="center"><b style="color:var(--ac)">Sua vez!</b> Quantos você consegue falar?</p>
+        <div class="row"><input id="lanceIn" type="number" inputmode="numeric" min="${min}" value="${min}" class="grow" style="font-size:22px;text-align:center;max-width:120px"><button class="btn grow" data-fn="lance">Eu falo esse tanto</button></div>
+        <div class="row" style="margin-top:8px">${[1, 2, 3, 5].map((k) => `<button class="btn alt sm grow" data-a='${A({ type: "lance", n: v.lance + k })}'>${v.lance + k}</button>`).join("")}</div>
+        ${v.lance ? `<button class="btn red huge full" style="margin-top:12px" data-a='${A({ type: "duvido" })}'>🤨 DUVIDO!</button>` : ""}</div>` + placarHTML(v.placar);
+    }
+    if (v.fase === "prova") {
+      if (v.souDono) return head + `<div class="card center"><p><b>${esc(v.duvidouNome)}</b> duvidou! Fale ${v.lance} em voz alta e toque +1 a cada um.</p>${timerHTML(v.fim, v.dur)}
+        <div class="counter">${v.cont}<span class="muted" style="font-size:40px">/${v.lance}</span></div>
+        <button class="btn green huge full" data-a='${A({ type: "mais" })}'>+1</button>
+        <div class="row" style="margin-top:8px"><button class="btn alt grow" data-a='${A({ type: "menos" })}'>−1</button><button class="btn alt grow" data-a='${A({ type: "desisto", confirm: "Desistir?" })}'>Desisto</button></div></div>`;
+      return head + `<div class="card center"><p><b>${esc(v.duvidouNome)}</b> duvidou! <b>${esc(v.donoNome)}</b> tem que falar ${v.lance}. Fiquem de olho!</p>${timerHTML(v.fim, v.dur)}
+        <div class="counter">${v.cont}<span class="muted" style="font-size:40px">/${v.lance}</span></div></div>`;
+    }
+    if (v.fase === "julgamento") {
+      if (v.souDono) return head + `<div class="card center"><h2>Falou todos! 😎</h2><p class="muted">A galera está julgando se valeu… (${v.votaram}/${v.juizes})</p></div>`;
+      return head + `<div class="card center"><h2>${esc(v.donoNome)} falou ${v.lance}. Valeu?</h2><p class="muted">Se tinha resposta errada ou repetida, não vale.</p>
+        ${v.votei ? `<p>Voto enviado ✅ (${v.votaram}/${v.juizes})</p>` : `<div class="row"><button class="btn green huge grow" data-a='${A({ type: "voto", valeu: true })}'>👍 Valeu</button><button class="btn red huge grow" data-a='${A({ type: "voto", valeu: false })}'>👎 Não valeu</button></div>`}</div>`;
+    }
+    if (v.fase === "resultado") return head + `<div class="card center"><div style="font-size:50px">${v.res.ok ? "😎" : "😂"}</div><h2>${v.res.ok ? `${esc(v.donoNome)} provou!` : `${esc(v.donoNome)} não conseguiu!`}</h2><p><b>${esc(v.res.vencNome)}</b> ganhou +2</p>
+      <button class="btn full" data-a='${A({ type: "proxima" })}'>${v.r >= v.rodadas ? "Ver resultado" : "Próxima rodada"}</button></div>` + placarHTML(v.placar);
+    return "";
+  };
+
+  // nome lembrado
+  conectar();
+  setTimeout(() => { const n = document.getElementById("nomeIn"); try { const s = localStorage.getItem("jv_nome"); if (n && s && !n.value) n.value = s; } catch (e) {} }, 400);
+})();
