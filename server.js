@@ -26,6 +26,25 @@ const now = () => Date.now();
 const online = (p) => p.conns.size > 0 || now() - p.lastSeen < 8000;
 const nameOf = (id) => (players.get(id) || {}).name || "?";
 
+// endereços desta máquina: o do roteador (hotspot) vem primeiro
+let endCache = { t: 0, v: [] };
+function enderecos() {
+  if (Date.now() - endCache.t < 5000) return endCache.v;
+  const out = [];
+  try {
+    for (const [nome, list] of Object.entries(os.networkInterfaces()))
+      for (const i of list || []) if (i.family === "IPv4" && !i.internal) {
+        const movel = /rmnet|ccmni|dummy|tun|v4-|pdp|wwan/i.test(nome);
+        const roteador = /^(ap|swlan|softap|wlan|wigig|rndis|bt-pan|eth)/i.test(nome) && !movel;
+        out.push({ ip: i.address, iface: nome, tipo: roteador ? "roteador" : movel ? "dados" : "outro" });
+      }
+  } catch (e) {}
+  const ord = { roteador: 0, outro: 1, dados: 2 };
+  out.sort((a, b) => ord[a.tipo] - ord[b.tipo]);
+  endCache = { t: Date.now(), v: out };
+  return out;
+}
+
 function clearTimers() { timers.forEach(clearTimeout); timers = []; }
 const ctx = {
   now,
@@ -56,8 +75,9 @@ function stateFor(pid) {
     me: pid,
     hostId,
     players: order.map((id) => players.get(id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name, online: online(p) })),
-    jogos: Object.values(GAMES).map((g) => ({ key: g.key, nome: g.nome, emoji: g.emoji, desc: g.desc, min: g.min || 2, opcoes: g.opcoes || [] })),
+    jogos: Object.values(GAMES).sort((a, b) => (a.ordem || 9) - (b.ordem || 9)).map((g) => ({ key: g.key, nome: g.nome, emoji: g.emoji, desc: g.desc, min: g.min || 2, opcoes: g.opcoes || [] })),
     game: g ? { key: game.key, nome: g.nome, emoji: g.emoji, view } : null,
+    enderecos: game ? undefined : enderecos().filter((e) => e.tipo !== "dados").map((e) => `http://${e.ip}:${PORT}`),
     lastResult,
   };
 }
@@ -142,13 +162,13 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  let ips = [];
-  try {
-    for (const list of Object.values(os.networkInterfaces())) for (const i of list || []) if (i.family === "IPv4" && !i.internal) ips.push(i.address);
-  } catch (e) {}
+  const ends = enderecos();
   console.log("\n  🎮  JOGOS DE VIAGEM rodando!\n");
   console.log("  Neste celular:   http://localhost:" + PORT);
-  if (ips.length) ips.forEach((ip) => console.log("  Para os amigos:  http://" + ip + ":" + PORT));
-  else console.log("  Para os amigos:  http://<IP do roteador>:" + PORT + "\n  (no celular dos amigos: Wi-Fi > detalhes da rede > 'Gateway' ou 'Roteador' = o IP)");
-  console.log("\n  Deixe esta tela aberta. Para parar: Ctrl+C\n");
+  const bons = ends.filter((e) => e.tipo !== "dados");
+  if (bons.length) bons.forEach((e) => console.log("  Para os amigos:  http://" + e.ip + ":" + PORT + (e.tipo === "roteador" ? "   <- roteador" : "")));
+  else console.log("  Para os amigos:  ligue o ROTEADOR do celular e rode 'jogo' de novo");
+  ends.filter((e) => e.tipo === "dados").forEach((e) => console.log("  (ignore " + e.ip + ": é a internet móvel)"));
+  console.log("\n  Mais fácil: abra localhost:" + PORT + " aqui e mostre o QR code pros amigos.");
+  console.log("  Deixe esta tela aberta. Para parar: Ctrl+C\n");
 });

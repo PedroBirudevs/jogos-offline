@@ -5,6 +5,7 @@ const pontos = (d) => (d <= 4 ? 4 : d <= 9 ? 3 : d <= 15 ? 2 : 0);
 
 module.exports = {
   key: "sintonia",
+  ordem: 3,
   nome: "Sintonia",
   emoji: "🎯",
   desc: "Um gira a roleta e dá uma dica. Os outros tentam acertar onde o ponteiro parou.",
@@ -24,7 +25,7 @@ module.exports = {
     if (st.i >= st.ordem.length) { st.fase = "fim"; return; }
     st.vidente = st.ordem[st.i];
     st.carta = st.cartas[st.i % st.cartas.length];
-    st.alvo = null; st.dica = ""; st.chutes = {}; st.fase = "girar"; st.ganhos = null;
+    st.alvo = null; st.dica = ""; st.chutes = {}; st.fase = "girar"; st.ganhos = null; st.previa = {};
   },
   act(st, pid, a, ctx) {
     if (a.type === "girar" && st.fase === "girar" && pid === st.vidente) { st.alvo = 3 + Math.floor(Math.random() * 95); st.fase = "dica"; return; }
@@ -32,6 +33,9 @@ module.exports = {
     if (a.type === "dica" && st.fase === "dica" && pid === st.vidente) {
       const d = String(a.dica || "").trim().slice(0, 60); if (!d) return "Escreva a dica";
       st.dica = d; st.fase = "chute"; return;
+    }
+    if (a.type === "mover" && st.fase === "chute" && pid !== st.vidente && st.pts[pid] !== undefined) {
+      st.previa = st.previa || {}; st.previa[pid] = Math.max(0, Math.min(100, Math.round(Number(a.valor)))); return;
     }
     if (a.type === "chute" && st.fase === "chute" && pid !== st.vidente && st.pts[pid] !== undefined) {
       st.chutes[pid] = Math.max(0, Math.min(100, Math.round(Number(a.valor))));
@@ -69,6 +73,8 @@ module.exports = {
       chutes: st.fase === "revela" ? st.jog.filter((p) => st.chutes[p.id] !== undefined).map((p) => ({ nome: p.name, v: st.chutes[p.id], g: st.ganhos[p.id] })) : null,
       ganhoVidente: st.ganhos ? st.ganhos[st.vidente] : null,
       placar: this._placar(st), jogando: st.pts[pid] !== undefined,
+      cores: Object.fromEntries(st.jog.map((p, i) => [p.id, ["#4cc3ff", "#ff6b2c", "#c6ff3d", "#ff5d9e", "#ffcf3f", "#9b7bff", "#3ddc84", "#ff5d6c"][i % 8]])),
+      ao_vivo: st.fase === "chute" ? st.jog.filter((p) => p.id !== pid && p.id !== st.vidente).map((p) => ({ id: p.id, nome: p.name, v: st.chutes[p.id] ?? (st.previa || {})[p.id] ?? null, ok: st.chutes[p.id] !== undefined })) : null,
     };
   },
 };

@@ -28,12 +28,16 @@
   const agora = () => Date.now() + off;
   const seg = (fim) => Math.max(0, Math.ceil((fim - agora()) / 1000));
   const timerHTML = (fim, total) => `<div class="row" style="margin:8px 0"><div class="bar grow"><i data-fim="${fim}" data-total="${total || 0}"></i></div><b class="timer" data-fim="${fim}">${seg(fim)}s</b></div>`;
+  setInterval(() => { const r = document.getElementById("roleta"); if (r) r.textContent = "ABCDEFGHIJLMNOPRSTUV"[Math.floor(Math.random() * 20)]; }, 90);
   setInterval(() => {
     document.querySelectorAll(".timer[data-fim]").forEach((el) => (el.textContent = seg(+el.dataset.fim) + "s"));
     document.querySelectorAll(".bar i[data-fim]").forEach((el) => { const t = +el.dataset.total; if (t) el.style.width = Math.max(0, Math.min(100, ((+el.dataset.fim - agora()) / t) * 100)) + "%"; });
   }, 250);
 
   const me = () => S && S.players.find((p) => p.id === pid);
+  const CORES = ["#4cc3ff", "#ff6b2c", "#c6ff3d", "#ff5d9e", "#ffcf3f", "#9b7bff", "#3ddc84", "#ff5d6c", "#2ee6d6", "#f78fff"];
+  const corDe = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CORES[h % CORES.length]; };
+  const av = (id, nomeP, tam) => `<span class="av" style="background:${corDe(id)};${tam ? `width:${tam}px;height:${tam}px;font-size:${tam * 0.42}px` : ""}">${esc(String(nomeP || "?").trim().slice(0, 1).toUpperCase())}</span>`;
   const nome = (id) => ((S && S.players.find((p) => p.id === id)) || {}).name || "?";
 
   // ---------- render com preservação de inputs ----------
@@ -55,6 +59,7 @@
     document.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => { const a = JSON.parse(b.dataset.a); if (a.confirm && !confirm(a.confirm)) return; delete a.confirm; send(a); }));
     document.querySelectorAll("[data-fn]").forEach((b) => (b.onclick = () => FN[b.dataset.fn](b)));
     document.querySelectorAll("[data-in]").forEach((i) => (i.oninput = () => FN[i.dataset.in](i)));
+    document.querySelectorAll("[data-hold]").forEach((el) => { const on = (e) => { e.preventDefault(); el.classList.add("show"); }, off = () => el.classList.remove("show"); el.onpointerdown = on; el.onpointerup = off; el.onpointerleave = off; el.onpointercancel = off; el.oncontextmenu = (e) => e.preventDefault(); });
     const h = HOOKS.splice(0); h.forEach((f) => f());
   }
   const HOOKS = [];
@@ -80,16 +85,24 @@
     const lr = S.lastResult;
     return `<div class="top"><div class="logo">Jogos de <span>Viagem</span></div><button class="btn sm alt" data-fn="sair">Sair</button></div>
     <div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Na sala (${S.players.filter((p) => p.online).length})</b><small class="muted">👑 = dono da sala</small></div>
-      <div class="row">${S.players.map((p) => `<span class="pill ${p.online ? "" : "off"} ${p.id === pid ? "me" : ""}">${p.id === S.hostId ? "👑 " : ""}${esc(p.name)}</span>`).join("")}</div></div>
+      <div class="row">${S.players.map((p) => `<span class="pill ${p.online ? "" : "off"} ${p.id === pid ? "me" : ""}">${av(p.id, p.name, 24)} ${p.id === S.hostId ? "👑 " : ""}${esc(p.name)}</span>`).join("")}</div></div>
+    ${convite()}
     ${lr ? `<div class="card"><h3 style="margin-bottom:8px">${esc(lr.titulo)}</h3><div class="list">${(lr.linhas || []).map((l, i) => `<div class="li"><span>${i + 1}. ${esc(l.nome)}</span><b>${esc(l.pontos)}</b></div>`).join("")}</div></div>` : ""}
     <h3 style="margin:16px 4px 10px">Escolha o jogo</h3>
-    <div class="games">${S.jogos.map((g) => `<button class="game" data-fn="abrir" data-k="${g.key}"><div class="e">${g.emoji}</div><b>${esc(g.nome)}</b><small>${esc(g.desc)}</small><small style="margin-top:6px">mín. ${g.min} jogadores</small></button>`).join("")}</div>`;
+    <div class="games">${S.jogos.map((g) => `<button class="game" data-fn="abrir" data-k="${g.key}"><img class="capa" src="/capas/${g.key}.svg" alt=""><div class="gi"><b>${g.emoji} ${esc(g.nome)}</b><small>${esc(g.desc)}</small><small class="minj">${g.min > 1 ? `mín. ${g.min} jogadores` : "dá pra jogar com bots"}</small></div></button>`).join("")}</div>`;
+  }
+  function convite() {
+    const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    const url = local ? (S.enderecos || [])[0] : location.origin;
+    if (!url) return `<div class="card convite"><b>📶 Chame a galera</b><p class="muted" style="margin:6px 0 0">Ligue o <b style="color:var(--txt)">roteador Wi-Fi</b> deste celular e rode <code>jogo</code> de novo no Termux. Aí aparece o QR code aqui.</p></div>`;
+    HOOKS.push(() => { const el = document.getElementById("qr"); if (el && window.qrcode && el.dataset.u !== url) { const q = qrcode(0, "M"); q.addData(url); q.make(); el.innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); el.dataset.u = url; } });
+    return `<div class="card convite"><div class="qr" id="qr"></div><div><b>📶 Chame a galera</b><p class="muted" style="margin:6px 0">1. Conecta no Wi-Fi deste celular<br>2. Aponta a câmera pro QR code</p><div class="url">${esc(url.replace("http://", ""))}</div></div></div>`;
   }
   FN.sair = () => { if (confirm("Sair da sala?")) send({ type: "leave" }).then(() => { lastHTML = ""; conectar(); }); };
   FN.abrir = (b) => {
     const g = S.jogos.find((x) => x.key === b.dataset.k);
     const m = $("#modal");
-    m.innerHTML = `<div class="sheet"><div class="row" style="justify-content:space-between"><h2>${g.emoji} ${esc(g.nome)}</h2><button class="btn sm alt" id="mx">✕</button></div>
+    m.innerHTML = `<div class="sheet"><img class="capa-modal" src="/capas/${g.key}.svg" alt=""><div class="row" style="justify-content:space-between"><h2>${g.emoji} ${esc(g.nome)}</h2><button class="btn sm alt" id="mx">✕</button></div>
       <p class="muted">${esc(g.desc)}</p>
       ${g.opcoes.map((o) => `<label class="l">${esc(o.nome)}</label><select id="op_${o.id}">${o.valores.map((v) => `<option ${v == o.padrao ? "selected" : ""}>${v}</option>`).join("")}</select>`).join("")}
       <div style="margin-top:16px"><button class="btn full" id="mgo">Começar pra todo mundo</button></div></div>`;
@@ -107,9 +120,9 @@
   function telaJogo() {
     const g = S.game, v = g.view || {};
     const corpo = (R[g.key] || (() => "<div class='card'>?</div>"))(v);
-    return `<div class="top"><div class="logo">${g.emoji} ${esc(g.nome)}</div><button class="btn sm alt" data-a='${A({ type: "lobby", confirm: "Encerrar o jogo pra todo mundo e voltar pra sala?" })}'>Sair do jogo</button></div>${corpo}`;
+    return `<div class="tema-${g.key}"><div class="top topjogo" style="background-image:linear-gradient(90deg,rgba(16,16,20,.92),rgba(16,16,20,.55)),url(/capas/${g.key}.svg)"><div class="logo">${g.emoji} ${esc(g.nome)}</div><button class="btn sm alt" data-a='${A({ type: "lobby", confirm: "Encerrar o jogo pra todo mundo e voltar pra sala?" })}'>Sair</button></div>${corpo}</div>`;
   }
-  const placarHTML = (pl, titulo) => `<div class="card"><b>${titulo || "Placar"}</b><div class="list" style="margin-top:8px">${pl.map((x, i) => `<div class="li ${x.id === pid ? "hl" : ""}"><span>${i + 1}. ${esc(x.nome)}</span><b>${x.pts}</b></div>`).join("")}</div></div>`;
+  const placarHTML = (pl, titulo) => `<div class="card"><b>${titulo || "Placar"}</b><div class="list" style="margin-top:8px">${pl.map((x, i) => `<div class="li ${x.id === pid ? "hl" : ""}"><span>${(x.pts > 0 && ["🥇", "🥈", "🥉"][i]) || i + 1 + "."} ${av(x.id, x.nome, 26)} ${esc(x.nome)}</span><b>${x.pts}</b></div>`).join("")}</div></div>`;
   const voltar = `<button class="btn full" data-a='${A({ type: "lobby" })}'>Voltar pra sala</button>`;
   const R = {};
 
@@ -209,13 +222,14 @@
     const fatia = (a, b, cor) => { const [x1, y1] = pt(Math.max(0, a), 180), [x2, y2] = pt(Math.min(100, b), 180); return `<path d="M200 200 L${x1} ${y1} A180 180 0 0 1 ${x2} ${y2} Z" fill="${cor}"/>`; };
     let zonas = "";
     if (alvo !== null && alvo !== undefined) zonas = fatia(alvo - 15, alvo + 15, "#ffcf3f55") + fatia(alvo - 9, alvo + 9, "#ff6b2c99") + fatia(alvo - 4, alvo + 4, "#c6ff3d");
-    const marcas = (chutes || []).map((c) => { const [x, y] = pt(c.v, 150); return `<circle cx="${x}" cy="${y}" r="9" fill="#4cc3ff" stroke="#111" stroke-width="2"/><text x="${x}" y="${y - 14}" fill="#fff" font-size="13" font-weight="800" text-anchor="middle">${esc(c.nome.slice(0, 8))}</text>`; }).join("");
+    const marcas = (chutes || []).filter((c) => c.v !== null && c.v !== undefined).map((c) => { const [x, y] = pt(c.v, 150); return `<circle cx="${x}" cy="${y}" r="9" fill="${c.cor || "#4cc3ff"}" stroke="#111" stroke-width="2" ${c.ok === false ? 'opacity=".55"' : ""}/><text x="${x}" y="${y - 14}" fill="#fff" font-size="13" font-weight="800" text-anchor="middle">${esc(c.nome.slice(0, 8))}${c.ok ? " ✓" : ""}</text>`; }).join("");
     const rot = agulha === null || agulha === undefined ? -90 : (agulha / 100) * 180 - 90;
     return `<svg class="dial" viewBox="0 0 400 215"><path d="M20 200 A180 180 0 0 1 380 200 Z" fill="#24242d" stroke="#33333e" stroke-width="2"/>${zonas}${marcas}
       ${agulha === null || agulha === undefined ? "" : `<g class="needle" style="transform:rotate(${rot}deg)"><line x1="200" y1="200" x2="200" y2="40" stroke="#fff" stroke-width="5" stroke-linecap="round"/></g>`}
       <circle cx="200" cy="200" r="12" fill="#fff"/></svg>`;
   }
-  FN.slider = (i) => { local.sint = +i.value; const g = document.querySelector(".needle"); if (g) g.style.transform = `rotate(${(i.value / 100) * 180 - 90}deg)`; };
+  let movT = 0;
+  FN.slider = (i) => { local.sint = +i.value; const g = document.querySelector(".needle"); if (g) g.style.transform = `rotate(${(i.value / 100) * 180 - 90}deg)`; const t = Date.now(); if (t - movT > 180) { movT = t; send({ type: "mover", valor: +i.value }); } };
   R.sintonia = (v) => {
     const spec = `<div class="spec"><span>⬅ ${esc(v.carta[0])}</span><span>${esc(v.carta[1])} ➡</span></div>`;
     const head = `<div class="row muted" style="justify-content:space-between;margin-bottom:8px"><span>Rodada ${v.rodada}/${v.total}</span><span>Quem dá a dica: <b style="color:var(--txt)">${esc(v.videnteNome)}</b></span></div>`;
@@ -237,16 +251,17 @@
       return head + `<div class="card center">${spec}${dialSVG(null, null)}<p class="muted">${esc(v.videnteNome)} está pensando na dica… 🤔</p></div>`;
     }
     if (v.fase === "chute") {
-      if (v.souVidente || !v.jogando) return head + `<div class="card center">${spec}<h2 style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(v.souVidente ? v.alvo : null, null)}<p class="muted">${v.enviaram}/${v.precisam} chutaram</p>
+      if (v.souVidente || !v.jogando) return head + `<div class="card center">${spec}<h2 style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(v.souVidente ? v.alvo : null, null, (v.ao_vivo || []).map((c) => ({ ...c, cor: v.cores[c.id] })))}<p class="muted">${v.enviaram}/${v.precisam} chutaram</p>
         <button class="btn alt sm" data-a='${A({ type: "revelar" })}'>Revelar agora</button></div>`;
       const val = v.meuChute ?? local.sint ?? 50;
-      return head + `<div class="card">${spec}<h2 class="center" style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(null, val)}
+      const outros = (v.ao_vivo || []).map((c) => ({ ...c, cor: v.cores[c.id] }));
+      return head + `<div class="card">${spec}<h2 class="center" style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(null, val, outros)}
         <input type="range" id="sintR" min="0" max="100" value="${val}" data-in="slider">
         <button class="btn full" data-fn="chutar">${v.meuChute !== undefined ? "Mudar chute" : "Confirmar chute"}</button>
         <p class="muted center">${v.meuChute !== undefined ? "Chute enviado ✅ · " : ""}${v.enviaram}/${v.precisam} chutaram</p></div>`;
     }
     if (v.fase === "revela") {
-      return head + `<div class="card">${spec}<h2 class="center" style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(v.alvo, v.alvo, v.chutes, true)}
+      return head + `<div class="card">${spec}<h2 class="center" style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(v.alvo, v.alvo, v.chutes.map((c) => ({ ...c, cor: v.cores[(v.placar.find((p) => p.nome === c.nome) || {}).id] })), true)}
         <div class="list">${v.chutes.map((c) => `<div class="li"><span>${esc(c.nome)} chutou ${c.v}</span><b>+${c.g}</b></div>`).join("")}
         <div class="li"><span>${esc(v.videnteNome)} (dica)</span><b>+${v.ganhoVidente}</b></div></div>
         <button class="btn full" style="margin-top:10px" data-a='${A({ type: "proxima" })}'>${v.rodada >= v.total ? "Ver resultado" : "Próxima rodada"}</button></div>` + placarHTML(v.placar);
@@ -261,17 +276,15 @@
     if (v.fase === "encerrado") return placarHTML(v.placar, "🕵️ Resultado") + voltar;
     if (!v.jogando) return `<div class="card center muted">Rodada em andamento. Você entra na próxima partida.</div>`;
     if (v.fase === "palavra") {
-      const show = local.ver === v.rodada;
+      const segredo = v.souImp ? `<div class="secret imp">VOCÊ É O<br>IMPOSTOR 🤫</div>${v.cat ? `<p class="muted">Categoria: <b style="color:var(--txt)">${esc(v.cat)}</b></p>` : ""}<p>Finja que sabe a palavra!</p>` : `<div class="secret">${esc(v.palavra)}</div><p class="muted">Categoria: ${esc(v.cat)}</p>`;
       return `<div class="card center"><div class="muted">Rodada ${v.rodada}</div>
-        ${show ? (v.souImp ? `<div class="secret imp">VOCÊ É O IMPOSTOR 🤫</div>${v.cat ? `<p class="muted">Categoria: <b style="color:var(--txt)">${esc(v.cat)}</b></p>` : ""}<p>Finja que sabe a palavra!</p>` : `<div class="secret">${esc(v.palavra)}</div><p class="muted">Categoria: ${esc(v.cat)}</p>`)
-          : `<div class="secret" style="font-size:22px">Toque pra ver sua palavra<br><small class="muted">(esconda a tela!)</small></div>`}
-        <button class="btn alt full" style="margin-top:10px" data-fn="verPalavra">${show ? "Esconder" : "Ver minha palavra"}</button></div>
+        <div class="hold" data-hold="1"><div class="frente"><div style="font-size:54px">🃏</div><b>SEGURE PRA VER</b><small class="muted">esconda a tela dos outros</small></div><div class="verso">${segredo}</div></div></div>
         <div class="card"><b>Como jogar</b><p class="muted" style="margin:6px 0">Começando por <b style="color:var(--txt)">${esc(v.comeca)}</b>, cada um fala UMA palavra relacionada, sem entregar demais. Deem 1 ou 2 voltas e depois votem.</p>
         <button class="btn full" data-a='${A({ type: "votacao" })}'>Ir pra votação</button></div>` + placarHTML(v.placar);
     }
     if (v.fase === "votacao") {
       return `<div class="card"><h2>Quem é o impostor?</h2><p class="muted">${v.votaram}/${v.jogadores.length} votaram</p>
-        <div class="vote">${v.jogadores.filter((j) => j.id !== pid).map((j) => `<button class="btn alt ${v.meuVoto === j.id ? "sel" : ""}" data-a='${A({ type: "voto", alvo: j.id })}'>${esc(j.nome)}${j.votou ? " ✓" : ""}</button>`).join("")}</div>
+        <div class="vote">${v.jogadores.filter((j) => j.id !== pid).map((j) => `<button class="btn alt ${v.meuVoto === j.id ? "sel" : ""}" data-a='${A({ type: "voto", alvo: j.id })}'>${av(j.id, j.nome, 28)} ${esc(j.nome)}${j.votou ? " ✓" : ""}</button>`).join("")}</div>
         <button class="btn sm alt" style="margin-top:10px" data-a='${A({ type: "apurar" })}'>Apurar agora</button></div>`;
     }
     if (v.fase === "chuteImpostor") {
@@ -282,11 +295,12 @@
       const ganhei = (v.venc === "impostor") === v.souImp;
       return `<div class="card center"><div style="font-size:50px">${ganhei ? "🎉" : "😵"}</div><h2>${v.venc === "impostor" ? "Impostor venceu!" : "Vocês acharam o impostor!"}</h2>
         <p class="muted">${esc(v.motivo)}</p><p>Impostor: <b>${v.impostores.map(esc).join(", ")}</b><br>Palavra: <b>${esc(v.palavra)}</b> <span class="muted">(${esc(v.cat)})</span></p>
+        <div class="list" style="text-align:left;margin-bottom:10px">${v.jogadores.map((j) => `<div class="li"><span>${av(j.id, j.nome, 24)} ${esc(j.nome)}${v.impostores.includes(j.nome) ? " 🤫" : ""}</span><span class="votobar"><i style="width:${(j.votos || 0) * 22}px"></i><b>${j.votos || 0}</b></span></div>`).join("")}</div>
         <div class="row"><button class="btn grow" data-a='${A({ type: "proxima" })}'>Nova rodada</button><button class="btn alt grow" data-a='${A({ type: "encerrar" })}'>Encerrar</button></div></div>` + placarHTML(v.placar);
     }
     return "";
   };
-  FN.verPalavra = () => { local.ver = local.ver === S.game.view.rodada ? null : S.game.view.rodada; lastHTML = ""; render(); };
+
   FN.chuteImp = () => send({ type: "chute", texto: $("#chuteImp").value });
 
   // ===== TABU =====
@@ -324,12 +338,12 @@
     const pl = placarHTML(v.placar);
     if (v.fase === "fim") return placarHTML(v.placar, "✋ Resultado final") + voltar;
     if (!v.jogando) return `<div class="card center muted">Rodada em andamento.</div>` + pl;
-    if (v.fase === "contagem") return `<div class="card center"><div class="muted">Rodada ${v.r}/${v.rodadas}</div><div class="letra">?</div><p>Sorteando a letra… <b class="timer" data-fim="${v.fim}"></b></p></div>` + pl;
+    if (v.fase === "contagem") return `<div class="card center"><div class="muted">Rodada ${v.r}/${v.rodadas}</div><div class="letra roleta" id="roleta">A</div><p>Sorteando a letra… <b class="timer" data-fim="${v.fim}"></b></p><div class="row" style="justify-content:center">${v.cats.map((c) => `<span class="pill">${esc(c)}</span>`).join("")}</div></div>` + pl;
     if (v.fase === "escrevendo" || v.fase === "parou") {
       const trava = v.fase === "parou";
       if (local.stopR !== v.r) { local.stopR = v.r; HOOKS.push(() => v.cats.forEach((_, i) => { const el = $("#st" + i); if (el) el.value = ""; })); }
       return `<div class="card"><div class="row" style="justify-content:space-between"><span class="muted">Rodada ${v.r}/${v.rodadas}</span>${trava ? `<b style="color:var(--red)">STOP! ${esc(v.quemParou || "Tempo")} — <span class="timer" data-fim="${v.fim}"></span></b>` : `<span>⏱ <b class="timer" data-fim="${v.fim}"></b></span>`}</div>
-        <div class="letra">${v.letra}</div>
+        <div class="letra ${local.popR !== v.r ? ((local.popR = v.r), "pop") : ""}">${v.letra}</div>
         ${v.cats.map((c, i) => `<div class="ans"><label class="l" for="st${i}">${esc(c)}</label><input id="st${i}" data-in="stopIn" autocomplete="off" autocapitalize="words" placeholder="${v.letra}…"></div>`).join("")}
         <button class="btn red huge full" style="margin-top:12px" data-fn="darStop" ${trava ? "disabled" : ""}>✋ STOP!</button></div>`;
     }

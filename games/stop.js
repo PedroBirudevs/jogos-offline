@@ -1,10 +1,15 @@
 // Stop (Adedonha)
 const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
 const LETRAS = "ABCDEFGHIJLMNOPRSTUV".split("");
-const CATS = ["Nome", "Animal", "Cidade/Estado/País", "Comida", "Cor", "Objeto", "Profissão", "Marca", "Filme/Série", "Time de futebol"];
+const CATS = ["Nome", "Animal", "Cidade/Estado/País", "Comida", "Cor", "Objeto", "Profissão", "Marca", "Filme/Série", "Time de futebol",
+  "Fruta", "Parte do corpo", "Jogador de futebol", "Cantor(a)", "Música", "Personagem", "Coisa que tem na cozinha", "Bebida", "Esporte", "Carro",
+  "App ou site", "Jogo de videogame", "Doce", "Coisa de praia", "Instrumento musical", "Coisa que voa", "Desenho animado", "Xingamento leve", "Peça de roupa", "Coisa de viagem",
+  "Novela", "Youtuber/Streamer", "Verbo", "Coisa da escola", "Remédio", "Coisa redonda", "Lugar da cidade", "Comida típica", "Inseto", "Planta/Flor"];
+const FIXOS = ["Nome", "Animal", "Cidade/Estado/País", "Comida"];
 
 module.exports = {
   key: "stop",
+  ordem: 4,
   nome: "Stop",
   emoji: "✋",
   desc: "Sorteia uma letra, todo mundo escreve uma palavra pra cada tema. Quem terminar grita STOP!",
@@ -12,12 +17,12 @@ module.exports = {
   opcoes: [
     { id: "rodadas", nome: "Rodadas", valores: [3, 5, 8], padrao: 5 },
     { id: "tempo", nome: "Tempo máximo (s)", valores: [60, 90, 120], padrao: 90 },
-    { id: "temas", nome: "Quantidade de temas", valores: [6, 8, 10], padrao: 8 },
+    { id: "temas", nome: "Quantidade de temas (sorteados)", valores: [6, 8, 10], padrao: 8 },
   ],
   init(list, o, ctx) {
     const st = {
       jog: list, rodadas: Number(o.rodadas) || 5, tempo: (Number(o.tempo) || 90) * 1000,
-      cats: CATS.slice(0, Number(o.temas) || 8), r: 0, usadas: [], pts: Object.fromEntries(list.map((p) => [p.id, 0])),
+      cats: [...FIXOS, ...CATS.filter((c) => !FIXOS.includes(c)).sort(() => Math.random() - 0.5)].slice(0, Number(o.temas) || 8), r: 0, usadas: [], pts: Object.fromEntries(list.map((p) => [p.id, 0])),
     };
     this._nova(st, ctx);
     return st;

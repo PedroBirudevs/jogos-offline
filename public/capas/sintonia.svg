@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1a1440"/><stop offset="1" stop-color="#3b1d6e"/></linearGradient></defs>
+<rect width="600" height="340" fill="url(#g)"/>
+<g fill="#fff" opacity=".5"><circle cx="60" cy="50" r="2"/><circle cx="540" cy="80" r="2"/><circle cx="480" cy="30" r="1.5"/><circle cx="120" cy="120" r="1.5"/><circle cx="560" cy="200" r="2"/></g>
+<path d="M90 280A210 210 0 0 1 510 280Z" fill="#f2e6c9"/>
+<path d="M300 280 L364 79 A210 210 0 0 1 418 106Z" fill="#ffcf3f"/>
+<path d="M300 280 L388 89 A210 210 0 0 1 404 97Z" fill="#ff6b2c"/>
+<path d="M300 280 L392 91 A210 210 0 0 1 398 94Z" fill="#4cc3ff"/>
+<path d="M300 280 L341 74 A210 210 0 0 1 364 79Z" fill="#ff6b2c"/>
+<line x1="300" y1="280" x2="380" y2="110" stroke="#d6283a" stroke-width="10" stroke-linecap="round"/>
+<circle cx="300" cy="280" r="22" fill="#d6283a"/>
+<text x="110" y="315" font-family="system-ui,sans-serif" font-weight="900" font-size="22" fill="#4cc3ff">FRIO</text>
+<text x="490" y="315" font-family="system-ui,sans-serif" font-weight="900" font-size="22" fill="#ff6b2c" text-anchor="end">QUENTE</text>
+<text x="300" y="52" font-family="system-ui,sans-serif" font-weight="900" font-size="38" text-anchor="middle" fill="#fff" letter-spacing="2">SINTONIA</text>
+</svg>

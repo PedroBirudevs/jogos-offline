@@ -4,6 +4,7 @@ const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { co
 
 module.exports = {
   key: "duvido",
+  ordem: 6,
   nome: "Duvido",
   emoji: "🤨",
   desc: "Diga quantos itens de um tema você consegue falar. O próximo aumenta ou grita DUVIDO!",

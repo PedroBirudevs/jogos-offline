@@ -4,6 +4,7 @@ const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { co
 
 module.exports = {
   key: "tabu",
+  ordem: 5,
   nome: "Tabu",
   emoji: "🤐",
   desc: "Faça seu time adivinhar a palavra sem falar as proibidas. O outro time fiscaliza.",

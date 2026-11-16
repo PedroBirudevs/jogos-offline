@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340">
+<defs><radialGradient id="g" cx=".5" cy=".4" r=".8"><stop offset="0" stop-color="#5a0f1c"/><stop offset="1" stop-color="#14060a"/></radialGradient></defs>
+<rect width="600" height="340" fill="url(#g)"/>
+<g fill="#2b2b36">
+<g transform="translate(110 200)"><circle cy="-50" r="34"/><path d="M-55 70Q-55 0 0 0Q55 0 55 70Z"/></g>
+<g transform="translate(220 200)"><circle cy="-50" r="34"/><path d="M-55 70Q-55 0 0 0Q55 0 55 70Z"/></g>
+<g transform="translate(380 200)"><circle cy="-50" r="34"/><path d="M-55 70Q-55 0 0 0Q55 0 55 70Z"/></g>
+<g transform="translate(490 200)"><circle cy="-50" r="34"/><path d="M-55 70Q-55 0 0 0Q55 0 55 70Z"/></g></g>
+<g transform="translate(300 185)"><circle cy="-58" r="42" fill="#ff3b55"/><path d="M-66 85Q-66 0 0 0Q66 0 66 85Z" fill="#ff3b55"/>
+<rect x="-30" y="-70" width="60" height="18" rx="9" fill="#111"/>
+<text y="60" font-family="system-ui,sans-serif" font-weight="900" font-size="56" fill="#fff" text-anchor="middle">?</text></g>
+<text x="300" y="60" font-family="system-ui,sans-serif" font-weight="900" font-size="44" text-anchor="middle" fill="#fff" letter-spacing="3">IMPOSTOR</text>
+<text x="300" y="320" font-family="system-ui,sans-serif" font-weight="700" font-size="18" text-anchor="middle" fill="#ff8a9a">quem não sabe a palavra?</text>
+</svg>

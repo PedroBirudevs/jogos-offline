@@ -15,8 +15,9 @@ pkg update -y && pkg install -y nodejs-lts git && git clone https://github.com/P
 ## Na viagem (sem internet)
 1. No celular do dono: ligue o **Roteador Wi-Fi / Ponto de acesso**.
 2. Os amigos conectam nesse Wi-Fi.
-3. No Termux do dono, digite `jogo` e Enter. Vai aparecer o endereço (ex.: `http://192.168.43.1:3000`).
-4. Todo mundo abre esse endereço no navegador. O dono abre `http://localhost:3000`.
+3. No Termux do dono, digite `jogo` e Enter.
+4. O dono abre `http://localhost:3000` no navegador: na sala aparece um **QR code**. Os amigos (já no Wi-Fi) apontam a câmera e entram.
+   O endereço muda quando o roteador é religado (Android sorteia a rede), por isso o QR code.
 
 Dica: puxe a notificação do Termux e toque em **Acquire wakelock** pra ele não parar com a tela apagada.
 

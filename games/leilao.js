@@ -67,6 +67,7 @@ function calendario(ids) {
 
 module.exports = {
   key: "leilao",
+  ordem: 1,
   nome: "Leilão OVER",
   emoji: "⚽",
   desc: "R$ 100 pra cada técnico. Lances de 10s em jogadores reais (EA FC 27), monte o time e jogue partidas ao vivo mudando a tática.",

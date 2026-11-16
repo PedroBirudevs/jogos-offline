@@ -4,6 +4,7 @@ const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toL
 
 module.exports = {
   key: "impostor",
+  ordem: 2,
   nome: "Impostor",
   emoji: "🕵️",
   desc: "Todos recebem a mesma palavra, menos o impostor. Cada um fala uma pista e depois votam.",
@@ -11,15 +12,16 @@ module.exports = {
   opcoes: [
     { id: "impostores", nome: "Impostores", valores: [1, 2], padrao: 1 },
     { id: "dica", nome: "Impostor vê a categoria?", valores: ["sim", "não"], padrao: "sim" },
+    { id: "cat", nome: "Categoria das palavras", valores: ["Todas", ...Object.keys(PAL)], padrao: "Todas" },
   ],
   init(list, o) {
-    const st = { jog: list, nImp: Number(o.impostores) || 1, dicaCat: o.dica !== "não", pts: Object.fromEntries(list.map((p) => [p.id, 0])), rodada: 0 };
+    const st = { jog: list, catFixa: PAL[o.cat] ? o.cat : null, nImp: Number(o.impostores) || 1, dicaCat: o.dica !== "não", pts: Object.fromEntries(list.map((p) => [p.id, 0])), rodada: 0 };
     this._nova(st);
     return st;
   },
   _nova(st) {
     st.rodada++;
-    const cats = Object.keys(PAL);
+    const cats = st.catFixa ? [st.catFixa] : Object.keys(PAL);
     st.cat = cats[Math.floor(Math.random() * cats.length)];
     st.palavra = PAL[st.cat][Math.floor(Math.random() * PAL[st.cat].length)];
     const ids = st.jog.map((p) => p.id).sort(() => Math.random() - 0.5);
