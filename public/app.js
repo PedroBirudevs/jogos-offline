@@ -254,7 +254,7 @@
       if (v.souVidente || !v.jogando) return head + `<div class="card center">${spec}<h2 style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(v.souVidente ? v.alvo : null, null, (v.ao_vivo || []).map((c) => ({ ...c, cor: v.cores[c.id] })))}<p class="muted">${v.enviaram}/${v.precisam} chutaram</p>
         <button class="btn alt sm" data-a='${A({ type: "revelar" })}'>Revelar agora</button></div>`;
       const val = v.meuChute ?? local.sint ?? 50;
-      const outros = (v.ao_vivo || []).map((c) => ({ ...c, cor: v.cores[c.id] }));
+      const outros = []; // cada um chuta sozinho
       return head + `<div class="card">${spec}<h2 class="center" style="margin:10px 0">“${esc(v.dica)}”</h2>${dialSVG(null, val, outros)}
         <input type="range" id="sintR" min="0" max="100" value="${val}" data-in="slider">
         <button class="btn full" data-fn="chutar">${v.meuChute !== undefined ? "Mudar chute" : "Confirmar chute"}</button>
@@ -276,7 +276,7 @@
     if (v.fase === "encerrado") return placarHTML(v.placar, "🕵️ Resultado") + voltar;
     if (!v.jogando) return `<div class="card center muted">Rodada em andamento. Você entra na próxima partida.</div>`;
     if (v.fase === "palavra") {
-      const segredo = v.souImp ? `<div class="secret imp">VOCÊ É O<br>IMPOSTOR 🤫</div>${v.cat ? `<p class="muted">Categoria: <b style="color:var(--txt)">${esc(v.cat)}</b></p>` : ""}<p>Finja que sabe a palavra!</p>` : `<div class="secret">${esc(v.palavra)}</div><p class="muted">Categoria: ${esc(v.cat)}</p>`;
+      const segredo = v.souImp ? `<div class="secret imp">VOCÊ É O<br>IMPOSTOR 🤫</div>${v.cat ? `<p class="muted" style="margin:8px 0 2px">Tema: <b style="color:var(--txt)">${esc(v.cat)}</b></p>` : ""}${v.pista ? `<p style="margin:2px 0">Dica: <b style="color:var(--ac);font-size:20px">${esc(v.pista)}</b></p>` : ""}<p class="muted" style="margin:4px 0">Finja que sabe a palavra!</p>` : `<div class="secret">${esc(v.palavra)}</div><p class="muted">Categoria: ${esc(v.cat)}</p>`;
       return `<div class="card center"><div class="muted">Rodada ${v.rodada}</div>
         <div class="hold" data-hold="1"><div class="frente"><div style="font-size:54px">🃏</div><b>SEGURE PRA VER</b><small class="muted">esconda a tela dos outros</small></div><div class="verso">${segredo}</div></div></div>
         <div class="card"><b>Como jogar</b><p class="muted" style="margin:6px 0">Começando por <b style="color:var(--txt)">${esc(v.comeca)}</b>, cada um fala UMA palavra relacionada, sem entregar demais. Deem 1 ou 2 voltas e depois votem.</p>
@@ -294,7 +294,7 @@
     if (v.fase === "fim") {
       const ganhei = (v.venc === "impostor") === v.souImp;
       return `<div class="card center"><div style="font-size:50px">${ganhei ? "🎉" : "😵"}</div><h2>${v.venc === "impostor" ? "Impostor venceu!" : "Vocês acharam o impostor!"}</h2>
-        <p class="muted">${esc(v.motivo)}</p><p>Impostor: <b>${v.impostores.map(esc).join(", ")}</b><br>Palavra: <b>${esc(v.palavra)}</b> <span class="muted">(${esc(v.cat)})</span></p>
+        <p class="muted">${esc(v.motivo)}</p><p>Impostor: <b>${v.impostores.map(esc).join(", ")}</b><br>Palavra: <b>${esc(v.palavra)}</b> <span class="muted">(${esc(v.cat)})</span>${v.pista ? `<br><small class="muted">dica do impostor: ${esc(v.pista)}</small>` : ""}</p>
         <div class="list" style="text-align:left;margin-bottom:10px">${v.jogadores.map((j) => `<div class="li"><span>${av(j.id, j.nome, 24)} ${esc(j.nome)}${v.impostores.includes(j.nome) ? " 🤫" : ""}</span><span class="votobar"><i style="width:${(j.votos || 0) * 22}px"></i><b>${j.votos || 0}</b></span></div>`).join("")}</div>
         <div class="row"><button class="btn grow" data-a='${A({ type: "proxima" })}'>Nova rodada</button><button class="btn alt grow" data-a='${A({ type: "encerrar" })}'>Encerrar</button></div></div>` + placarHTML(v.placar);
     }
@@ -347,9 +347,17 @@
         ${v.cats.map((c, i) => `<div class="ans"><label class="l" for="st${i}">${esc(c)}</label><input id="st${i}" data-in="stopIn" autocomplete="off" autocapitalize="words" placeholder="${v.letra}…"></div>`).join("")}
         <button class="btn red huge full" style="margin-top:12px" data-fn="darStop" ${trava ? "disabled" : ""}>✋ STOP!</button></div>`;
     }
+    const cel = (l, c) => `<div class="cell ${l.pts === 0 ? "inv" : ""} ${l.eu ? "mark" : ""}" ${l.id !== pid && l.txt ? `data-a='${A({ type: "marcar", alvo: l.id, c })}'` : ""}><span><small class="muted">${esc(l.nome)}:</small> ${esc(l.txt) || "—"}${l.motivo ? `<br><small style="color:var(--red);display:inline-block">${v.juiz ? "🤖" : "⚠️"} ${esc(l.motivo)}</small>` : ""}</span><span>${l.marcas ? `<small style="color:var(--red)">${v.juiz ? "🔁" : "❌"}${l.marcas}/${v.maioria}</small> ` : ""}<span class="pt">${l.pts}</span></span></div>`;
+    if (v.fase === "votacao") {
+      const t = v.tema;
+      return `<div class="card"><div class="row" style="justify-content:space-between"><span class="muted">Letra ${v.letra} · tema ${v.ci + 1}/${v.cats.length}</span><span>⏱ <b class="timer" data-fim="${v.fim}"></b></span></div>
+        <h2 style="margin:6px 0">${esc(t.cat)}</h2><p class="muted" style="margin:0 0 8px">Toque nas respostas erradas pra tirar (precisa de ${v.maioria} voto${v.maioria > 1 ? "s" : ""}).</p>
+        ${t.linhas.map((l) => cel(l, v.ci)).join("")}
+        <button class="btn ${v.souPronto ? "alt" : "green"} full" style="margin-top:10px" data-a='${A({ type: "pronto" })}' ${v.souPronto ? "disabled" : ""}>${v.souPronto ? `Esperando a galera (${v.prontos}/${v.placar.length})` : "✅ Pronto, próximo tema"}</button></div>` + pl;
+    }
     if (v.fase === "correcao") {
-      return `<div class="card"><div class="row" style="justify-content:space-between"><h2>Correção — letra ${v.letra}</h2></div><p class="muted" style="margin:4px 0 0">Toque numa resposta errada dos outros pra anular. Igual = 5, única = 10.</p></div>
-        ${v.tabela.map((t) => `<div class="card"><b>${esc(t.cat)}</b>${t.linhas.map((l) => `<div class="cell ${l.pts === 0 ? "inv" : ""} ${l.eu ? "mark" : ""}" ${l.id !== pid ? `data-a='${A({ type: "marcar", alvo: l.id, c: v.tabela.indexOf(t) })}'` : ""}><span><small class="muted">${esc(l.nome)}:</small> ${esc(l.txt) || "—"}</span><span>${l.marcas ? `<small style="color:var(--red)">❌${l.marcas}</small> ` : ""}<span class="pt">${l.pts}</span></span></div>`).join("")}</div>`).join("")}
+      return `<div class="card"><h2>${v.juiz ? "🤖 Juiz automático" : "Resultado"} — letra ${v.letra}</h2><p class="muted" style="margin:4px 0 0">${v.juiz ? `O juiz já tirou o que não existe ou não é do tema. Discorda? Toque na resposta: com ${v.maioria} voto${v.maioria > 1 ? "s" : ""} ela muda.` : "Ainda dá pra tocar numa resposta pra tirar."} Igual = 5, única = 10.</p></div>
+        ${v.tabela.map((t, c) => `<div class="card"><b>${esc(t.cat)}</b>${t.linhas.map((l) => cel(l, c)).join("")}</div>`).join("")}
         <div class="card"><b>Pontos da rodada</b><div class="list" style="margin-top:6px">${Object.entries(v.rodadaPts).map(([id, p]) => `<div class="li"><span>${esc(nome(id))}</span><b>+${p}</b></div>`).join("")}</div></div>
         <button class="btn full" data-a='${A({ type: "proxima" })}'>${v.r >= v.rodadas ? "Ver resultado" : "Próxima rodada"}</button>` + pl;
     }

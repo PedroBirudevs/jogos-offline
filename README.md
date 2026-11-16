@@ -30,6 +30,12 @@ cd ~/jogos-offline && git pull
 
 ## Jogadores do Leilão
 - Fonte: ratings públicos do **EA SPORTS FC 27**. Leilões separados: Brasileirão, Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, ou todas juntas (+ Liga Portugal, Arábia Saudita e Eredivisie).
-- Só entra quem joga: por clube, o goleiro titular e os principais 5 DEF, 5 MEI e 3 ATA (os melhores de cada posição). 2.337 jogadores no total, ~250 por liga.
-- Os outros 18 clubes da Série A **não estão no FC 27**: os elencos e overalls deles são **aproximados** (aparece "overall aproximado" na carta).
+- Só os clubes grandes de cada liga (Brasil: os 12 grandes; Inglaterra: o big 6; ~6 por liga na Europa) e, por clube, os principais 2 GOL, 6 DEF, 6 MEI e 4 ATA. 894 jogadores.
+- Uma escala só pra todo mundo (máx. ~91 no mundo, ~82 no Brasileirão), então "todas juntas" é justo.
+- Os clubes brasileiros fora do FC 27 têm elencos e overalls **aproximados**, ajustados pela fase de 2026 (aparece "overall aproximado" na carta).
   Pra corrigir, edite `tools/brasileirao_manual.py` e rode `python3 tools/build_players.py caminho/players-db.csv`.
+
+## Stop: quem corrige
+- **Juiz automático** (padrão): confere cada resposta num dicionário offline (`data/dicionario.json`: municípios e estados do IBGE, nomes do Censo, países, jogadores e clubes do Leilão e listas de animais, comidas, cores, profissões, marcas…). Aceita sem acento, plural e um erro de digitação. Só sorteia temas que ele sabe conferir. Se ele errar, a galera toca na resposta e muda por maioria.
+- **Votação**: 10s por tema pra tirar as respostas erradas; quando todo mundo aperta "Pronto", pula pro próximo.
+- Pra aumentar o dicionário, edite `tools/listas_stop.py` e rode `python3 tools/build_dicionario.py municipios.csv estados.csv nomes-censos-ibge.csv`.

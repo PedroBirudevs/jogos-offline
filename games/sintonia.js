@@ -74,7 +74,8 @@ module.exports = {
       ganhoVidente: st.ganhos ? st.ganhos[st.vidente] : null,
       placar: this._placar(st), jogando: st.pts[pid] !== undefined,
       cores: Object.fromEntries(st.jog.map((p, i) => [p.id, ["#4cc3ff", "#ff6b2c", "#c6ff3d", "#ff5d9e", "#ffcf3f", "#9b7bff", "#3ddc84", "#ff5d6c"][i % 8]])),
-      ao_vivo: st.fase === "chute" ? st.jog.filter((p) => p.id !== pid && p.id !== st.vidente).map((p) => ({ id: p.id, nome: p.name, v: st.chutes[p.id] ?? (st.previa || {})[p.id] ?? null, ok: st.chutes[p.id] !== undefined })) : null,
+      // ponteiros dos outros: só quem dá a dica vê (cada um chuta sozinho, sem copiar)
+      ao_vivo: st.fase === "chute" && (pid === st.vidente || st.pts[pid] === undefined) ? st.jog.filter((p) => p.id !== pid && p.id !== st.vidente).map((p) => ({ id: p.id, nome: p.name, v: st.chutes[p.id] ?? (st.previa || {})[p.id] ?? null, ok: st.chutes[p.id] !== undefined })) : null,
     };
   },
 };

@@ -1,5 +1,5 @@
 // Impostor: todo mundo recebe a mesma palavra, menos o(s) impostor(es)
-const PAL = require("../data/palavras");
+const { DICAS, ...PAL } = require("../data/palavras");
 const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 module.exports = {
@@ -12,10 +12,11 @@ module.exports = {
   opcoes: [
     { id: "impostores", nome: "Impostores", valores: [1, 2], padrao: 1 },
     { id: "dica", nome: "Impostor vê a categoria?", valores: ["sim", "não"], padrao: "sim" },
+    { id: "pista", nome: "Impostor ganha uma dica distante?", valores: ["sim", "não"], padrao: "sim" },
     { id: "cat", nome: "Categoria das palavras", valores: ["Todas", ...Object.keys(PAL)], padrao: "Todas" },
   ],
   init(list, o) {
-    const st = { jog: list, catFixa: PAL[o.cat] ? o.cat : null, nImp: Number(o.impostores) || 1, dicaCat: o.dica !== "não", pts: Object.fromEntries(list.map((p) => [p.id, 0])), rodada: 0 };
+    const st = { jog: list, catFixa: PAL[o.cat] ? o.cat : null, nImp: Number(o.impostores) || 1, dicaCat: o.dica !== "não", pista: o.pista !== "não", pts: Object.fromEntries(list.map((p) => [p.id, 0])), rodada: 0 };
     this._nova(st);
     return st;
   },
@@ -80,6 +81,7 @@ module.exports = {
       fase: st.fase, rodada: st.rodada, jogando, souImp,
       palavra: jogando && !souImp ? st.palavra : fim ? st.palavra : null,
       cat: !souImp || st.dicaCat || fim ? st.cat : null,
+      pista: (souImp && st.pista) || fim ? DICAS[st.palavra] || null : null,
       comeca: nome(st.comeca),
       jogadores: st.jog.map((p) => ({ id: p.id, nome: p.name, votou: !!st.votos[p.id], votos: fim || st.fase === "chuteImpostor" ? (st.cont || {})[p.id] || 0 : null })),
       meuVoto: st.votos[pid], votaram: Object.keys(st.votos).length,

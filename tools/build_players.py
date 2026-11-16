@@ -3,13 +3,24 @@ Uso: python3 tools/build_players.py caminho/players-db.csv
 """
 import csv, json, sys, random, collections, os
 sys.path.insert(0, os.path.dirname(__file__))
-from brasileirao_manual import CLUBES
+from brasileirao_manual import CLUBES, GRANDES_BR, AJUSTE_EA
 
 GRANDES = {"Premier League": "Premier League", "LALIGA EA SPORTS": "LaLiga", "Serie A Enilive": "Serie A",
            "Bundesliga": "Bundesliga", "Ligue 1 McDonald's": "Ligue 1", "Liga Portugal": "Liga Portugal",
            "ROSHN Saudi League": "Arábia Saudita", "Eredivisie": "Eredivisie"}
 # só quem joga: por clube, os melhores de cada posição (titulares + reservas que entram)
-POR_CLUBE = {"GOL": 1, "DEF": 5, "MEI": 5, "ATA": 3}
+POR_CLUBE = {"GOL": 2, "DEF": 6, "MEI": 6, "ATA": 4}
+# só os clubes grandes/tradicionais de cada liga
+GRANDES_CLUBES = {
+  "Premier League": ["Arsenal", "Chelsea", "Liverpool", "Manchester City", "Man Utd", "Spurs"],
+  "LaLiga": ["Real Madrid", "FC Barcelona", "Atlético de Madrid", "Athletic Club", "Valencia CF", "Sevilla FC"],
+  "Serie A": ["Juventus", "Inter", "AC Milan", "SSC Napoli", "AS Roma", "SS Lazio"],
+  "Bundesliga": ["FC Bayern München", "Borussia Dortmund", "Leverkusen", "FC Schalke 04", "Hamburger SV", "M'gladbach"],
+  "Ligue 1": ["Paris SG", "Olympique de Marseille", "OL", "AS Monaco", "LOSC Lille"],
+  "Liga Portugal": ["SL Benfica", "FC Porto", "Sporting CP", "SC Braga"],
+  "Arábia Saudita": ["Al Hilal", "Al Nassr", "Al Ittihad", "Al Ahli"],
+  "Eredivisie": ["Ajax", "PSV", "Feyenoord"],
+}
 BR_EA = {"Botafogo", "Bahia"}
 GRUPO = {"GK": "GOL", "CB": "DEF", "LB": "DEF", "RB": "DEF", "LWB": "DEF", "RWB": "DEF",
          "CDM": "MEI", "CM": "MEI", "CAM": "MEI", "LM": "MEI", "RM": "MEI",
@@ -54,6 +65,9 @@ def main(csv_path):
         k = (x["club_name"], x["league_name"])
         liga = GRANDES.get(x["league_name"]) or ("Brasileirão" if x["club_name"] in BR_EA else None)
         if not liga: continue
+        if liga == "Brasileirão":
+            if x["club_name"] not in GRANDES_BR: continue
+        elif x["club_name"] not in GRANDES_CLUBES.get(liga, []): continue
         p = x["positions"].split(",")[0].strip()
         if p not in GRUPO: continue
         nome = x["common_name"] or x["short_name"]
@@ -61,9 +75,12 @@ def main(csv_path):
         if key in seen: continue
         seen.add(key)
         st = [int(float(x[c] or 0)) for c in ("pace", "shooting", "passing", "dribbling", "defending", "physic")]
-        out.append([nome, PT[p], GRUPO[p], int(x["overall"]), *st, x["club_name"], liga or "Top 100", flag(NAC.get(x["nationality_name"], "")), 1 if k in top100 or liga == "Brasileirão" else 0, 0])
+        ovr = int(x["overall"]); aj = AJUSTE_EA.get((nome, x["club_name"]))
+        if aj: st = [min(97, s + (aj - ovr)) for s in st]; ovr = aj
+        out.append([nome, PT[p], GRUPO[p], ovr, *st, x["club_name"], liga or "Top 100", flag(NAC.get(x["nationality_name"], "")), 1 if k in top100 or liga == "Brasileirão" else 0, 0])
     rnd = random.Random(27)
     for club, lst in CLUBES.items():
+        if club not in GRANDES_BR: continue
         for nome, p, ovr in lst:
             g = GRUPO[p]
             out.append([nome, PT[p], g, ovr, *stats_fake(g, ovr, rnd), club, "Brasileirão", flag(EST.get(nome, "BR")), 1, 1])
