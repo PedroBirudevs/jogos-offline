@@ -124,7 +124,7 @@
       <div class="fut-top"><div class="fut-l"><div class="fut-ovr">${j.ovr}</div><div class="fut-pos">${esc(j.pos)}</div><div class="fut-flag">${j.flag}</div></div>
         <div class="fut-av">${esc(ini(j.nome))}</div></div>
       <div class="fut-nome">${esc(j.nome)}</div>
-      <div class="fut-clube">${esc(j.clube)}${j.liga && j.liga !== "Top 100" ? " · " + esc(j.liga) : ""}</div>
+      <div class="fut-clube">${esc(j.clube)}${j.liga ? " · " + esc(j.liga) : ""}</div>
       <div class="fut-st">${lab.map((l, i) => `<div><b>${vals[i]}</b><span>${l}</span></div>`).join("")}</div>
       ${j.aprox ? `<div class="fut-aprox">overall aproximado</div>` : ""}</div>`;
   };

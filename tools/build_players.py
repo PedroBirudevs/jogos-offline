@@ -6,7 +6,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 from brasileirao_manual import CLUBES
 
 GRANDES = {"Premier League": "Premier League", "LALIGA EA SPORTS": "LaLiga", "Serie A Enilive": "Serie A",
-           "Bundesliga": "Bundesliga", "Ligue 1 McDonald's": "Ligue 1"}
+           "Bundesliga": "Bundesliga", "Ligue 1 McDonald's": "Ligue 1", "Liga Portugal": "Liga Portugal",
+           "ROSHN Saudi League": "Arábia Saudita", "Eredivisie": "Eredivisie"}
+# só quem joga: por clube, os melhores de cada posição (titulares + reservas que entram)
+POR_CLUBE = {"GOL": 1, "DEF": 5, "MEI": 5, "ATA": 3}
 BR_EA = {"Botafogo", "Bahia"}
 GRUPO = {"GK": "GOL", "CB": "DEF", "LB": "DEF", "RB": "DEF", "LWB": "DEF", "RWB": "DEF",
          "CDM": "MEI", "CM": "MEI", "CAM": "MEI", "LM": "MEI", "RM": "MEI",
@@ -50,7 +53,7 @@ def main(csv_path):
     for x in rows:
         k = (x["club_name"], x["league_name"])
         liga = GRANDES.get(x["league_name"]) or ("Brasileirão" if x["club_name"] in BR_EA else None)
-        if not (liga or k in top100): continue
+        if not liga: continue
         p = x["positions"].split(",")[0].strip()
         if p not in GRUPO: continue
         nome = x["common_name"] or x["short_name"]
@@ -64,6 +67,12 @@ def main(csv_path):
         for nome, p, ovr in lst:
             g = GRUPO[p]
             out.append([nome, PT[p], g, ovr, *stats_fake(g, ovr, rnd), club, "Brasileirão", flag(EST.get(nome, "BR")), 1, 1])
+    # corta quem não costuma jogar
+    porclube = collections.defaultdict(list)
+    for r in out: porclube[(r[10], r[2])].append(r)
+    out = []
+    for (clube, g), lst in porclube.items():
+        lst.sort(key=lambda r: -r[3]); out += lst[:POR_CLUBE[g]]
     out.sort(key=lambda r: -r[3])
     cols = ["nome", "pos", "grupo", "ovr", "pac", "sho", "pas", "dri", "def", "phy", "clube", "liga", "flag", "top", "aprox"]
     os.makedirs(os.path.join(os.path.dirname(__file__), "..", "data"), exist_ok=True)

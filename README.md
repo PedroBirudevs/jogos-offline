@@ -3,7 +3,7 @@
 Jogos pra jogar com os amigos **sem internet**: um celular Android vira o "dono da sala",
 liga o roteador Wi-Fi e roda os jogos. Os outros entram pelo navegador.
 
-Jogos: ⚽ Leilão OVER (estilo 100pracada: R$ 100 pra cada, lances de 10s, bots, partidas AO VIVO com tática, pontos corridos/mata-mata, gol de ouro, taça de quem gastou melhor — 3.956 jogadores reais do EA FC 27) · 🎯 Sintonia · 🕵️ Impostor · 🤐 Tabu · ✋ Stop · 🤨 Duvido
+Jogos: ⚽ Leilão OVER (estilo 100pracada: R$ 100 pra cada, lances de 10s, bots, partidas AO VIVO com tática, pontos corridos/mata-mata, gol de ouro, taça de quem gastou melhor — jogadores reais do EA FC 27, separados por liga) · 🎯 Sintonia · 🕵️ Impostor · 🤐 Tabu · ✋ Stop · 🤨 Duvido
 
 ## Instalar no Android (uma vez só, COM internet)
 1. Instale o **Termux** pela F-Droid (https://f-droid.org/packages/com.termux/). A versão da Play Store é antiga.
@@ -28,6 +28,7 @@ cd ~/jogos-offline && git pull
 ```
 
 ## Jogadores do Leilão
-- Fonte: ratings públicos do **EA SPORTS FC 27** (5 grandes ligas completas + clubes do top 100 mundial + Botafogo e Bahia).
+- Fonte: ratings públicos do **EA SPORTS FC 27**. Leilões separados: Brasileirão, Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, ou todas juntas (+ Liga Portugal, Arábia Saudita e Eredivisie).
+- Só entra quem joga: por clube, o goleiro titular e os principais 5 DEF, 5 MEI e 3 ATA (os melhores de cada posição). 2.337 jogadores no total, ~250 por liga.
 - Os outros 18 clubes da Série A **não estão no FC 27**: os elencos e overalls deles são **aproximados** (aparece "overall aproximado" na carta).
   Pra corrigir, edite `tools/brasileirao_manual.py` e rode `python3 tools/build_players.py caminho/players-db.csv`.

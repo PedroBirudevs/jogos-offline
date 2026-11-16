@@ -3,18 +3,9 @@
 // formação, estilo e postura mudando durante o jogo. Prorrogação com gol de ouro no mata-mata.
 const DB = require("../data/jogadores.json");
 const ALL = DB.rows.map((r, i) => { const o = { id: i }; DB.cols.forEach((c, k) => (o[c] = r[k])); return o; });
-const GRANDES = ["Premier League", "LaLiga", "Serie A", "Bundesliga", "Ligue 1"];
-const BASES = {
-  "Top 100 clubes do mundo": () => ALL.filter((p) => p.ovr >= 70),
-  "Brasileirão": () => ALL.filter((p) => p.liga === "Brasileirão"),
-  "Só craques (82+)": () => ALL.filter((p) => p.ovr >= 82),
-  "5 grandes ligas": () => ALL.filter((p) => GRANDES.includes(p.liga)),
-  "Premier League": () => ALL.filter((p) => p.liga === "Premier League"),
-  "LaLiga": () => ALL.filter((p) => p.liga === "LaLiga"),
-  "Serie A": () => ALL.filter((p) => p.liga === "Serie A"),
-  "Bundesliga": () => ALL.filter((p) => p.liga === "Bundesliga"),
-  "Ligue 1": () => ALL.filter((p) => p.liga === "Ligue 1"),
-};
+const LIGAS = ["Brasileirão", "Premier League", "LaLiga", "Serie A", "Bundesliga", "Ligue 1"];
+const BASES = { "Todas juntas (+ Portugal, Arábia e Holanda)": () => ALL };
+for (const l of LIGAS) BASES[l] = () => ALL.filter((p) => p.liga === l);
 const FORMACAO = { 5: { GOL: 1, DEF: 2, MEI: 1, ATA: 1 }, 7: { GOL: 1, DEF: 2, MEI: 2, ATA: 2 }, 11: { GOL: 1, DEF: 4, MEI: 3, ATA: 3 } };
 const ESQUEMAS = {
   5: ["2-1-1", "1-2-1", "1-1-2", "3-1-0"],
@@ -81,7 +72,7 @@ module.exports = {
   desc: "R$ 100 pra cada técnico. Lances de 10s em jogadores reais (EA FC 27), monte o time e jogue partidas ao vivo mudando a tática.",
   min: 1,
   opcoes: [
-    { id: "base", nome: "Jogadores do leilão", valores: Object.keys(BASES), padrao: "Top 100 clubes do mundo" },
+    { id: "base", nome: "Jogadores do leilão", valores: Object.keys(BASES), padrao: "Brasileirão" },
     { id: "elenco", nome: "Jogadores em campo", valores: ["5", "7", "11"], padrao: "5" },
     { id: "formato", nome: "Formato do campeonato", valores: ["Pontos corridos + mata-mata", "Pontos corridos", "Mata-mata"], padrao: "Pontos corridos + mata-mata" },
     { id: "bots", nome: "Bots pra completar", valores: ["Nenhum", "Até 4 times", "Até 6 times", "Até 8 times"], padrao: "Nenhum" },
@@ -94,11 +85,11 @@ module.exports = {
     const times = list.map((p) => ({ id: p.id, nome: p.name, dinheiro: ORC, elenco: [], bot: false }));
     const nb = Math.max(alvo - times.length, times.length < 2 ? 1 : 0);
     shuffle(BOTS).slice(0, nb).forEach((nome, i) => times.push({ id: "bot" + i, nome, dinheiro: ORC, elenco: [], bot: true, estilo: Math.random() }));
-    const base = (BASES[o.base] || BASES["Top 100 clubes do mundo"])();
+    const base = (BASES[o.base] || BASES["Brasileirão"])();
     const pool = {};
     for (const g of ["GOL", "DEF", "MEI", "ATA"]) pool[g] = base.filter((p) => p.grupo === g).sort((a, b) => b.ovr - a.ovr);
     const st = {
-      fase: "leilao", base: o.base || "Top 100 clubes do mundo", n, form: { ...FORMACAO[n] }, tempo: (Number(o.tempo) || 10) * 1000,
+      fase: "leilao", base: o.base || "Brasileirão", n, form: { ...FORMACAO[n] }, tempo: (Number(o.tempo) || 10) * 1000,
       formato: o.formato || "Pontos corridos + mata-mata", times, pool, lote: null, log: [], timer: null, lotes: 0,
       fator: 5 / n, tatica: {},
     };
