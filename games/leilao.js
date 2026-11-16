@@ -127,7 +127,7 @@ module.exports = {
     }
     const j = P.splice(idx, 1)[0];
     st.lotes++;
-    st.lote = { j, preco: Math.max(1, Math.min(this._base(st, j.ovr), teto)), lider: null, fim: ctx.now() + st.tempo, passou: [], vendido: false };
+    st.lote = { j, preco: 1 /* todo jogador começa em R$ 1 */, lider: null, fim: ctx.now() + st.tempo, passou: [], vendido: false };
     st.timer = ctx.later(st.tempo, () => this._fechar(st, ctx));
     this._botsPensam(st, ctx);
   },
@@ -175,10 +175,14 @@ module.exports = {
         const apetite = rnd(1.0, 1.9) * (0.85 + t.estilo * 0.4);
         L.teto[t.id] = Math.min(this._max(st, t), Math.round(Math.max(this._base(st, L.j.ovr) * apetite, L.j.ovr >= 80 ? porVaga * 1.3 : porVaga * 0.6)));
       }
-      ctx.later(rnd(1200, Math.min(st.tempo - 1500, 5000)), () => {
+      ctx.later(rnd(700, Math.min(st.tempo - 2000, 3000)), () => {
         const L2 = st.lote; if (L2 !== L || L.vendido || L.lider === t.id) return;
         const prox = L.lider ? L.preco + 1 : L.preco;
-        if (prox <= L.teto[t.id] && this._pode(st, t, prox)) this._lance(st, t, L.lider && L.teto[t.id] - L.preco > 8 && Math.random() < 0.3 ? 5 : 1, ctx);
+        if (prox <= L.teto[t.id] && this._pode(st, t, prox)) {
+          const folga = L.teto[t.id] - L.preco; // quanto ainda acha que vale a mais
+          const inc = folga > 6 ? Math.max(1, Math.round(folga * rnd(0.15, 0.45))) : 1;
+          this._lance(st, t, L.lider ? inc : 0, ctx);
+        }
         else { if (!L.passou.includes(t.id)) L.passou.push(t.id); this._checaPasses(st, ctx); }
       });
     }
