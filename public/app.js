@@ -130,13 +130,23 @@
   };
   const ORD = { GOL: 0, DEF: 1, MEI: 2, ATA: 3 };
   const faltaTxt = (f) => Object.entries(f).filter(([, n]) => n > 0).map(([g, n]) => `${n} ${g}`).join(", ");
-  const teamHTML = (t, n) => `<div class="team ${t.id === pid ? "mine" : ""}"><div class="row" style="justify-content:space-between"><b>${esc(t.nome)}${t.id === pid ? " (você)" : ""}</b><span class="tag">💰 ${brl(t.dinheiro)}</span></div>
+  const teamHTML = (t, n) => `<div class="team ${t.id === pid ? "mine" : ""}"><div class="row" style="justify-content:space-between"><b>${t.bot ? "🤖 " : ""}${esc(t.nome)}${t.id === pid ? " (você)" : ""}</b><span class="tag">💵 R$ ${t.dinheiro}</span></div>
     <div class="muted" style="font-size:12px;margin:2px 0 4px">${t.elenco.length}/${n} · ATQ ${t.r.ataque} · DEF ${t.r.defesa} · GERAL ${t.r.geral}${faltaTxt(t.falta) ? ` · falta: ${faltaTxt(t.falta)}` : ""}</div>
-    ${[...t.elenco].sort((a, b) => ORD[a.grupo] - ORD[b.grupo]).map((j) => `<div class="j"><span><span class="mini ${tier(j.ovr)}">${j.ovr}</span> ${j.flag} ${esc(j.nome)} <small class="muted">${esc(j.pos)}${j.preco ? " · " + j.preco + "M" : ""}</small></span></div>`).join("")}</div>`;
+    ${[...t.elenco].sort((a, b) => ORD[a.grupo] - ORD[b.grupo]).map((j) => `<div class="j"><span><span class="mini ${tier(j.ovr)}">${j.ovr}</span> ${j.flag} ${esc(j.nome)} <small class="muted">${esc(j.pos)}${j.preco ? " · R$ " + j.preco : ""}</small></span></div>`).join("")}</div>`;
   const agrupa = (l) => { const c = {}; l.forEach((x) => (c[x.nome] = (c[x.nome] || 0) + 1)); return Object.entries(c).map(([n, k]) => esc(n) + (k > 1 ? " " + k : "")).join(", "); };
   const jogoHTML = (g, nomeT) => `<div class="jogo"><span class="t">${esc(nomeT(g.a))}</span><span class="placar">${g.ga} x ${g.gb}</span><span class="t r">${esc(nomeT(g.b))}</span></div>
     ${g.golsA.length || g.golsB.length || g.pen ? `<div class="gols">${g.golsA.length ? "⚽ " + agrupa(g.golsA) : ""}${g.golsA.length && g.golsB.length ? " · " : ""}${g.golsB.length ? "⚽ " + agrupa(g.golsB) : ""}${g.pen ? `<br>Pênaltis: ${g.pen[0]} x ${g.pen[1]}` : ""}</div>` : ""}`;
-  R.leilao = (v) => {
+  const real = (n) => "R$ " + n;
+  const chips = (campo, lista, atual) => `<div class="chips">${lista.map((x) => `<button class="chip ${x === atual ? "on" : ""}" data-a='${A({ type: "tatica", [campo]: x })}'>${esc(x)}</button>`).join("")}</div>`;
+  const taticaHTML = (v, titulo) => v.minhaTatica ? `<div class="card"><b>${titulo || "Sua tática"}</b>
+      <label class="l">Formação</label>${chips("form", v.esquemas, v.minhaTatica.form)}
+      <label class="l">Estilo</label>${chips("estilo", v.estilos, v.minhaTatica.estilo)}
+      <label class="l">Postura</label>${chips("postura", v.posturas, v.minhaTatica.postura)}</div>` : "";
+  const tabelaHTML = (v) => v.tabela && v.etapa !== undefined && v.totalRodadas ? `<div class="card" style="padding:10px"><table><tr><th>#</th><th>Time</th><th class="n">P</th><th class="n">J</th><th class="n">V</th><th class="n">E</th><th class="n">D</th><th class="n">SG</th></tr>
+      ${v.tabela.map((t, i) => `<tr style="${t.id === pid ? "color:var(--ac)" : ""}"><td>${i + 1}</td><td><b>${esc(t.nome)}</b></td><td class="n"><b>${t.pts}</b></td><td class="n">${t.j}</td><td class="n">${t.v}</td><td class="n">${t.e}</td><td class="n">${t.d}</td><td class="n">${t.sg}</td></tr>`).join("")}</table></div>` : "";
+  const artHTML = (v) => v.artilharia && v.artilharia.length ? `<div class="card"><b>⚽ Artilharia</b><div class="list" style="margin-top:8px">${v.artilharia.map((a, i) => `<div class="li"><span>${i + 1}. ${esc(a.nome)} <small class="muted">${esc(a.time)}</small></span><b>${a.gols}</b></div>`).join("")}</div></div>` : "";
+  R.leilao = (v) => `<div class="tema100">${leilaoCorpo(v)}</div>`;
+  function leilaoCorpo(v) {
     const nomeT = (id) => (v.times.find((t) => t.id === id) || {}).nome;
     const meu = v.times.find((t) => t.id === pid);
     const timesHTML = `<div class="list">${[...v.times].sort((a, b) => (a.id === pid ? -1 : b.id === pid ? 1 : 0)).map((t) => teamHTML(t, v.n)).join("")}</div>`;
@@ -148,47 +158,49 @@
       else if (L.vendido) acoes = "";
       else if (!v.precisoDessa) acoes = `<p class="muted center">Você já tem todos os ${j.grupo} que precisa</p>`;
       else if (L.lider === pid) acoes = `<div class="center"><b style="color:var(--ac);font-size:20px">Você está ganhando! 🔥</b></div>`;
-      else if (!L.lider) acoes = `<button class="btn huge full" data-a='${A({ type: "lance", inc: 0 })}' ${v.meuMax < L.preco ? "disabled" : ""}>Pegar por ${brl(L.preco)}</button>`;
-      else acoes = `<div class="row">${[1, 5, 10].map((i) => `<button class="btn grow" style="font-size:22px;padding:18px" data-a='${A({ type: "lance", inc: i })}' ${v.meuMax < L.preco + i ? "disabled" : ""}>+${i}</button>`).join("")}</div>`;
+      else if (!L.lider) acoes = `<button class="btn huge full" data-a='${A({ type: "lance", inc: 0 })}' ${v.meuMax < L.preco ? "disabled" : ""}>Pegar por ${real(L.preco)}</button>`;
+      else acoes = `<div class="row">${[1, 2, 5].map((i) => `<button class="btn grow" style="font-size:22px;padding:18px" data-a='${A({ type: "lance", inc: i })}' ${v.meuMax < L.preco + i ? "disabled" : ""}>+${i}</button>`).join("")}</div>`;
       if (meu && !v.cheio && !L.vendido && L.lider !== pid && v.precisoDessa) acoes += `<button class="btn alt full" style="margin-top:8px" data-a='${A({ type: "passar" })}' ${L.passei ? "disabled" : ""}>${L.passei ? "Você passou" : "Passar"}</button>`;
-      return `<div class="muted center" style="font-size:13px;margin-bottom:6px">${esc(v.base)} · ${v.restantes} jogadores na fila</div>
+      return `<div class="muted center" style="font-size:13px;margin-bottom:6px">💵 R$ 100 pra cada · ${esc(v.base)} · ${v.restantes} na fila</div>
         ${cardHTML(j)}
         <div class="card center" style="margin-top:10px;padding:12px">
           <div class="muted">${L.vendido ? (L.lider ? "VENDIDO para" : "Ninguém quis") : L.lider ? "Maior lance" : "Lance inicial"}</div>
-          <div class="preco">${L.vendido && !L.lider ? "—" : brl(L.preco)}</div>
+          <div class="preco">${L.vendido && !L.lider ? "—" : real(L.preco)}</div>
           ${L.lider ? `<div style="font-weight:800">${esc(L.liderNome)}</div>` : ""}
           ${L.vendido ? "" : timerHTML(L.fim, v.tempo)}
         </div>
         <div style="margin:10px 0">${acoes}</div>
-        ${meu ? `<div class="muted center" style="margin-bottom:10px">Seu dinheiro: <b style="color:var(--txt)">${brl(meu.dinheiro)}</b> · lance máx.: <b style="color:var(--txt)">${brl(Math.max(0, v.meuMax))}</b></div>` : ""}
+        ${meu ? `<div class="muted center" style="margin-bottom:10px">Seu dinheiro: <b style="color:var(--txt)">${real(meu.dinheiro)}</b> · lance máx.: <b style="color:var(--txt)">${real(Math.max(0, v.meuMax))}</b><br><small>O que sobrar no fim não vale nada!</small></div>` : ""}
         ${v.log.length ? `<div class="card"><div class="list">${v.log.map((l) => `<div class="muted" style="font-size:14px">• ${esc(l)}</div>`).join("")}</div></div>` : ""}
         ${timesHTML}`;
     }
     if (v.fase === "times") {
-      return `<div class="card center"><h2>Times montados! ⚽</h2><p class="muted">Pontos corridos ida e volta, simulado pelos atributos de cada jogador. Depois ${v.times.length >= 4 ? "semifinal e final" : "a final entre os 2 melhores"}.</p>
-        <button class="btn full" data-a='${A({ type: "campeonato" })}'>Começar campeonato</button></div>` + timesHTML;
+      return `<div class="card center"><h2>Elencos fechados! ⚽</h2><p class="muted">Formato: <b style="color:var(--txt)">${esc(v.formato)}</b>. As partidas são ao vivo: dá pra mudar a tática durante o jogo.</p>
+        <button class="btn full" data-a='${A({ type: "comecar" })}'>Começar campeonato</button></div>${taticaHTML(v, "Tática inicial")}` + timesHTML;
     }
-    const tab = v.tabela ? `<div class="card" style="padding:10px"><table><tr><th>#</th><th>Time</th><th class="n">P</th><th class="n">J</th><th class="n">V</th><th class="n">E</th><th class="n">D</th><th class="n">SG</th></tr>
-      ${v.tabela.map((t, i) => `<tr style="${t.id === pid ? "color:var(--ac)" : ""}"><td>${i + 1}</td><td><b>${esc(t.nome)}</b></td><td class="n"><b>${t.pts}</b></td><td class="n">${t.j}</td><td class="n">${t.v}</td><td class="n">${t.e}</td><td class="n">${t.d}</td><td class="n">${t.sg}</td></tr>`).join("")}</table></div>` : "";
-    const art = v.artilharia && v.artilharia.length ? `<div class="card"><b>⚽ Artilharia</b><div class="list" style="margin-top:8px">${v.artilharia.map((a, i) => `<div class="li"><span>${i + 1}. ${esc(a.nome)} <small class="muted">${esc(a.time)}</small></span><b>${a.gols}</b></div>`).join("")}</div></div>` : "";
-    if (v.fase === "liga") {
-      const ult = v.rodada >= v.totalRodadas;
-      return `<div class="card"><div class="row" style="justify-content:space-between"><h2>Rodada ${v.rodada}/${v.totalRodadas}</h2><span class="tag">${v.rodada > v.totalRodadas / 2 ? "Volta" : "Ida"}</span></div><div style="margin-top:10px">${v.resultados.map((g) => jogoHTML(g, nomeT)).join("")}</div>
-        <button class="btn full" data-a='${A({ type: "avancar" })}'>${ult ? "Ir pro mata-mata 🏆" : "Próxima rodada"}</button></div>${tab}${art}`;
+    if (v.fase === "aovivo") {
+      const meuJ = v.jogos.find((g) => g.a === pid || g.b === pid);
+      const minTxt = v.min > 90 ? `${v.min}' PRORROGAÇÃO · gol de ouro` : v.min > 0 ? `${Math.min(v.min, 90)}'` : "Vai começar…";
+      const placar = (g, big) => `<div class="${big ? "live" : "jogo"}"><span class="t">${esc(nomeT(g.a))}</span><span class="placar">${g.ga} x ${g.gb}${g.pen ? `<small> (${g.pen[0]}x${g.pen[1]} pên.)</small>` : ""}</span><span class="t r">${esc(nomeT(g.b))}</span></div>`;
+      let h = `<div class="card center" style="padding:10px"><b>${esc(v.titulo)}</b> · <span class="ao-vivo">● AO VIVO</span> <b>${minTxt}</b></div>`;
+      if (meuJ) h += `<div class="card">${placar(meuJ, true)}${meuJ.fim ? `<div class="center muted">Fim de jogo</div>` : ""}<div class="ev">${meuJ.ev.map((e) => `<div class="${e.gol ? "gol" : ""}"><b>${e.m}'</b> ${esc(e.t)}</div>`).join("") || `<div class="muted">Bola rolando…</div>`}</div></div>${taticaHTML(v, "Mude a tática agora")}`;
+      const outros = v.jogos.filter((g) => g !== meuJ);
+      if (outros.length) h += `<div class="card"><b>Outros jogos</b><div style="margin-top:8px">${outros.map((g) => placar(g, false)).join("")}</div></div>`;
+      if (!meuJ) h += `<div class="card"><div class="ev">${v.jogos.flatMap((g) => g.ev.slice(0, 3)).map((e) => `<div class="${e.gol ? "gol" : ""}"><b>${e.m}'</b> ${esc(e.t)}</div>`).join("")}</div></div>`;
+      return h + tabelaHTML(v);
     }
-    if (v.fase === "mata" || v.fase === "fim") {
-      let h = "";
-      if (v.resSemis) h += `<div class="card"><h2>Semifinais</h2><div style="margin-top:10px">${v.resSemis.map((g) => jogoHTML(g, nomeT)).join("")}</div></div>`;
-      if (v.resFinal) h += `<div class="card" style="border-color:var(--gold)"><h2>🏆 Final</h2><div style="margin-top:10px">${jogoHTML(v.resFinal, nomeT)}</div><div class="center" style="font-size:26px;font-weight:900;color:var(--gold);margin-top:8px">${esc(nomeT(v.campeao))} é CAMPEÃO!</div></div>`;
-      else {
-        const prox = v.etapa === "semis" && !v.resSemis ? v.chave.semis.map(([a, b]) => `${esc(nomeT(a))} x ${esc(nomeT(b))}`).join("<br>") : v.chave.final && v.chave.final[0] ? `${esc(nomeT(v.chave.final[0]))} x ${esc(nomeT(v.chave.final[1]))}` : "";
-        h += `<div class="card"><h2>${v.etapa === "semis" && !v.resSemis ? "Semifinais" : "🏆 Final"}</h2><p>${prox}</p><button class="btn full" data-a='${A({ type: "avancar" })}'>${v.etapa === "semis" && !v.resSemis ? "Jogar semifinais" : "Jogar a final"}</button></div>`;
-      }
-      if (v.fase === "fim") h += voltar;
-      return h + tab + art;
+    if (v.fase === "intervalo") {
+      return `<div class="card"><h2>${esc(v.titulo)} — resultados</h2><div style="margin-top:10px">${v.jogos.map((g) => `<div class="jogo"><span class="t">${esc(nomeT(g.a))}</span><span class="placar">${g.ga} x ${g.gb}${g.pen ? `<small> (${g.pen[0]}x${g.pen[1]})</small>` : ""}</span><span class="t r">${esc(nomeT(g.b))}</span></div>${g.prorr && !g.pen ? `<div class="gols">⚡ decidido no gol de ouro</div>` : ""}`).join("")}</div>
+        <button class="btn full" data-a='${A({ type: "proxima" })}'>${esc(v.proxTxt || "Próxima rodada")}</button></div>${taticaHTML(v, "Tática pro próximo jogo")}${tabelaHTML(v)}${artHTML(v)}`;
+    }
+    if (v.fase === "fim") {
+      const gm = v.gastouMelhor || [];
+      return `<div class="card center" style="border-color:var(--ac)"><div style="font-size:56px">🏆</div><h2 style="font-size:28px;color:var(--ac)">${esc(nomeT(v.campeao))} é CAMPEÃO!</h2></div>
+        ${gm.length ? `<div class="card"><b>🏅 Taça de quem gastou melhor</b><p class="muted" style="margin:4px 0 8px">Mais força de time por real gasto</p><div class="list">${gm.map((x, i) => `<div class="li ${x.id === pid ? "hl" : ""}"><span>${["🥇", "🥈", "🥉"][i]} ${esc(x.nome)}</span><small>OVR ${x.geral} · gastou ${real(x.gasto)}</small></div>`).join("")}</div></div>` : ""}
+        ${artHTML(v)}${tabelaHTML(v)}${voltar}<div style="margin-top:12px">${timesHTML}</div>`;
     }
     return `<div class="card">Carregando…</div>`;
-  };
+  }
 
   // ===== SINTONIA =====
   function dialSVG(alvo, agulha, chutes, revela) {

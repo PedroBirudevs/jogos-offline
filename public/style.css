@@ -113,3 +113,19 @@ input[type=range]{padding:0;height:44px;background:transparent;border:0;accent-c
 .mini{display:inline-block;min-width:26px;text-align:center;font-weight:900;font-size:12px;border-radius:6px;padding:1px 4px;color:#111}
 .mini.gold{background:#e8c25a}.mini.silver{background:#c4ccd4}.mini.bronze{background:#c98c55}
 .team.mine{outline:2px solid var(--ac)}
+
+/* tema 100 pra cada */
+.tema100{--ac:#f7d24c}
+.tema100 .btn:not(.alt):not(.red):not(.green):not(.blue):not(.orange){background:#f7d24c;color:#111}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--p2);border:1px solid var(--line);color:var(--txt);border-radius:99px;padding:8px 12px;font:700 14px system-ui,sans-serif;cursor:pointer}
+.chip.on{background:var(--ac);color:#111;border-color:var(--ac)}
+.live{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.live .t{flex:1;font-weight:900;font-size:18px}
+.live .t.r{text-align:right}
+.live .placar{font-size:40px;font-weight:900;min-width:110px;text-align:center}
+.ao-vivo{color:#ff4d5e;font-weight:900;animation:pisca 1s infinite}
+@keyframes pisca{50%{opacity:.35}}
+.ev{display:grid;gap:4px;font-size:14px;max-height:300px;overflow:auto}
+.ev div{background:var(--p2);border-radius:8px;padding:6px 10px}
+.ev .gol{background:#f7d24c;color:#111;font-weight:800}

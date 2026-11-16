@@ -3,7 +3,7 @@
 Jogos pra jogar com os amigos **sem internet**: um celular Android vira o "dono da sala",
 liga o roteador Wi-Fi e roda os jogos. Os outros entram pelo navegador.
 
-Jogos: ⚽ Leilão OVER (3.956 jogadores reais com overall e atributos do EA FC 27, monta o time por posição e disputa campeonato com artilharia) · 🎯 Sintonia · 🕵️ Impostor · 🤐 Tabu · ✋ Stop · 🤨 Duvido
+Jogos: ⚽ Leilão OVER (estilo 100pracada: R$ 100 pra cada, lances de 10s, bots, partidas AO VIVO com tática, pontos corridos/mata-mata, gol de ouro, taça de quem gastou melhor — 3.956 jogadores reais do EA FC 27) · 🎯 Sintonia · 🕵️ Impostor · 🤐 Tabu · ✋ Stop · 🤨 Duvido
 
 ## Instalar no Android (uma vez só, COM internet)
 1. Instale o **Termux** pela F-Droid (https://f-droid.org/packages/com.termux/). A versão da Play Store é antiga.
