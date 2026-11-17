@@ -77,13 +77,13 @@ def main(csv_path):
         st = [int(float(x[c] or 0)) for c in ("pace", "shooting", "passing", "dribbling", "defending", "physic")]
         ovr = int(x["overall"]); aj = AJUSTE_EA.get((nome, x["club_name"]))
         if aj: st = [min(97, s + (aj - ovr)) for s in st]; ovr = aj
-        out.append([nome, PT[p], GRUPO[p], ovr, *st, x["club_name"], liga or "Top 100", flag(NAC.get(x["nationality_name"], "")), 1 if k in top100 or liga == "Brasileirão" else 0, 0])
+        out.append([nome, PT[p], GRUPO[p], ovr, *st, x["club_name"], liga or "Top 100", flag(NAC.get(x["nationality_name"], "")), 1 if k in top100 or liga == "Brasileirão" else 0, 0, int(x["player_id"])])
     rnd = random.Random(27)
     for club, lst in CLUBES.items():
         if club not in GRANDES_BR: continue
         for nome, p, ovr in lst:
             g = GRUPO[p]
-            out.append([nome, PT[p], g, ovr, *stats_fake(g, ovr, rnd), club, "Brasileirão", flag(EST.get(nome, "BR")), 1, 1])
+            out.append([nome, PT[p], g, ovr, *stats_fake(g, ovr, rnd), club, "Brasileirão", flag(EST.get(nome, "BR")), 1, 1, 0])
     # corta quem não costuma jogar
     porclube = collections.defaultdict(list)
     for r in out: porclube[(r[10], r[2])].append(r)
@@ -91,7 +91,7 @@ def main(csv_path):
     for (clube, g), lst in porclube.items():
         lst.sort(key=lambda r: -r[3]); out += lst[:POR_CLUBE[g]]
     out.sort(key=lambda r: -r[3])
-    cols = ["nome", "pos", "grupo", "ovr", "pac", "sho", "pas", "dri", "def", "phy", "clube", "liga", "flag", "top", "aprox"]
+    cols = ["nome", "pos", "grupo", "ovr", "pac", "sho", "pas", "dri", "def", "phy", "clube", "liga", "flag", "top", "aprox", "ea"]
     os.makedirs(os.path.join(os.path.dirname(__file__), "..", "data"), exist_ok=True)
     dst = os.path.join(os.path.dirname(__file__), "..", "data", "jogadores.json")
     json.dump({"cols": cols, "fonte": "EA SPORTS FC 27 (ratings públicos) + Brasileirão aproximado", "rows": out}, open(dst, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))

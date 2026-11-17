@@ -5,7 +5,21 @@ const DB = require("../data/jogadores.json");
 const ALL = DB.rows.map((r, i) => { const o = { id: i }; DB.cols.forEach((c, k) => (o[c] = r[k])); return o; });
 const LIGAS = ["Brasileirão", "Premier League", "LaLiga", "Serie A", "Bundesliga", "Ligue 1"];
 const BASES = { "Todas juntas (+ Portugal, Arábia e Holanda)": () => ALL };
-for (const l of LIGAS) BASES[l] = () => ALL.filter((p) => p.liga === l);
+// Liga sozinha: nota relativa à própria liga (o melhor do Brasileirão vira ~91, igual ao melhor da Premier).
+// "Todas juntas": escala única do mundo (aí o Pedro não fica igual ao Luis Díaz).
+const TOPO = 91;
+function escalaLiga(lista) {
+  const v = lista.map((p) => p.ovr).sort((a, b) => a - b);
+  const M = v[v.length - 1], m = v[Math.floor(v.length * 0.2)];
+  if (!(M > m) || M >= TOPO) return lista;
+  return lista.map((p) => {
+    const d = Math.round((TOPO - M) * Math.max(0, Math.min(1, (p.ovr - m) / (M - m))));
+    if (!d) return p;
+    const up = (x) => Math.min(99, x + d);
+    return { ...p, ovr: p.ovr + d, pac: up(p.pac), sho: up(p.sho), pas: up(p.pas), dri: up(p.dri), def: up(p.def), phy: up(p.phy) };
+  });
+}
+for (const l of LIGAS) { const lst = escalaLiga(ALL.filter((p) => p.liga === l)); BASES[l] = () => lst; }
 const FORMACAO = { 5: { GOL: 1, DEF: 2, MEI: 1, ATA: 1 }, 7: { GOL: 1, DEF: 2, MEI: 2, ATA: 2 }, 11: { GOL: 1, DEF: 4, MEI: 3, ATA: 3 } };
 const ESQUEMAS = {
   5: ["2-1-1", "1-2-1", "1-1-2", "3-1-0"],
@@ -53,7 +67,16 @@ function quemFez(t) {
   const tot = w.reduce((s, x) => s + x.w, 0); if (!tot) return null;
   let r = Math.random() * tot; for (const x of w) { r -= x.w; if (r <= 0) return x.j; } return w[0].j;
 }
-const pub = (j) => j && { id: j.id, nome: j.nome, pos: j.pos, grupo: j.grupo, ovr: j.ovr, pac: j.pac, sho: j.sho, pas: j.pas, dri: j.dri, def: j.def, phy: j.phy, clube: j.clube, liga: j.liga, flag: j.flag, aprox: !!j.aprox, preco: j.preco };
+const fs = require("fs"), path = require("path");
+const FOTOS = path.join(__dirname, "..", "public", "fotos");
+const slug = (s) => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+let TEM = new Set(), TEM_t = 0;
+const temFoto = (j) => {
+  if (Date.now() - TEM_t > 10000) { TEM_t = Date.now(); try { TEM = new Set(fs.readdirSync(FOTOS)); } catch (e) { TEM = new Set(); } }
+  const f = slug(j.nome + "-" + j.clube) + ".jpg";
+  return TEM.has(f) ? "/fotos/" + f : null;
+};
+const pub = (j) => j && { foto: j.id >= 0 ? temFoto(j) : null, id: j.id, nome: j.nome, pos: j.pos, grupo: j.grupo, ovr: j.ovr, pac: j.pac, sho: j.sho, pas: j.pas, dri: j.dri, def: j.def, phy: j.phy, clube: j.clube, liga: j.liga, flag: j.flag, aprox: !!j.aprox, preco: j.preco };
 function calendario(ids) {
   const a = [...ids]; if (a.length % 2) a.push(null);
   const n = a.length, rod = [];
@@ -364,3 +387,4 @@ module.exports = {
     return v;
   },
 };
+module.exports._BASES = BASES;

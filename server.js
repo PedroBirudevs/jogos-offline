@@ -119,7 +119,7 @@ function act(pid, a) {
 }
 
 // ---------------- HTTP ----------------
-const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json", ".webmanifest": "application/manifest+json" };
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".json": "application/json", ".webmanifest": "application/manifest+json" };
 
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
@@ -156,7 +156,7 @@ const server = http.createServer((req, res) => {
   if (!fp.startsWith(PUB)) { res.writeHead(403); return res.end(); }
   fs.readFile(fp, (e, d) => {
     if (e) { res.writeHead(404); return res.end("404"); }
-    res.writeHead(200, { "Content-Type": MIME[path.extname(fp)] || "application/octet-stream", "Cache-Control": "no-cache" });
+    res.writeHead(200, { "Content-Type": MIME[path.extname(fp)] || "application/octet-stream", "Cache-Control": f.startsWith("/fotos/") ? "max-age=604800" : "no-cache" });
     res.end(d);
   });
 });

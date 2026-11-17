@@ -31,9 +31,17 @@ cd ~/jogos-offline && git pull
 ## Jogadores do Leilão
 - Fonte: ratings públicos do **EA SPORTS FC 27**. Leilões separados: Brasileirão, Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, ou todas juntas (+ Liga Portugal, Arábia Saudita e Eredivisie).
 - Só os clubes grandes de cada liga (Brasil: os 12 grandes; Inglaterra: o big 6; ~6 por liga na Europa) e, por clube, os principais 2 GOL, 6 DEF, 6 MEI e 4 ATA. 894 jogadores.
-- Uma escala só pra todo mundo (máx. ~91 no mundo, ~82 no Brasileirão), então "todas juntas" é justo.
+- Leilão de uma liga só: a nota é relativa à liga (o melhor de cada liga fica ~91, ex.: Pedro 91 no Brasileirão).
+- "Todas juntas": escala única do mundo (aí o Pedro fica 82 e o Luis Díaz 88), pra ser justo.
 - Os clubes brasileiros fora do FC 27 têm elencos e overalls **aproximados**, ajustados pela fase de 2026 (aparece "overall aproximado" na carta).
   Pra corrigir, edite `tools/brasileirao_manual.py` e rode `python3 tools/build_players.py caminho/players-db.csv`.
+
+## Fotos dos jogadores
+As fotos vêm da Wikipédia e ficam salvas no celular (funciona offline depois). Com internet, rode uma vez:
+```
+cd ~/jogos-offline && node tools/baixar-fotos.js
+```
+Demora uns 5–10 min. Quem não tiver foto livre na Wikipédia continua com as iniciais. Rodar de novo só baixa o que falta.
 
 ## Stop: quem corrige
 - **Juiz automático** (padrão): confere cada resposta num dicionário offline (`data/dicionario.json`: municípios e estados do IBGE, nomes do Censo, países, jogadores e clubes do Leilão e listas de animais, comidas, cores, profissões, marcas…). Aceita sem acento, plural e um erro de digitação. Só sorteia temas que ele sabe conferir. Se ele errar, a galera toca na resposta e muda por maioria.

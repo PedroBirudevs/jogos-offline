@@ -135,7 +135,7 @@
     const lab = j.grupo === "GOL" ? LAB.GOL : LAB.X, vals = [j.pac, j.sho, j.pas, j.dri, j.def, j.phy];
     return `<div class="fut ${tier(j.ovr)}">
       <div class="fut-top"><div class="fut-l"><div class="fut-ovr">${j.ovr}</div><div class="fut-pos">${esc(j.pos)}</div><div class="fut-flag">${j.flag}</div></div>
-        <div class="fut-av">${esc(ini(j.nome))}</div></div>
+        <div class="fut-av">${j.foto ? `<img src="${j.foto}" alt="" onerror="this.remove()">` : ""}<span>${esc(ini(j.nome))}</span></div></div>
       <div class="fut-nome">${esc(j.nome)}</div>
       <div class="fut-clube">${esc(j.clube)}${j.liga ? " · " + esc(j.liga) : ""}</div>
       <div class="fut-st">${lab.map((l, i) => `<div><b>${vals[i]}</b><span>${l}</span></div>`).join("")}</div>
@@ -145,7 +145,7 @@
   const faltaTxt = (f) => Object.entries(f).filter(([, n]) => n > 0).map(([g, n]) => `${n} ${g}`).join(", ");
   const teamHTML = (t, n) => `<div class="team ${t.id === pid ? "mine" : ""}"><div class="row" style="justify-content:space-between"><b>${t.bot ? "🤖 " : ""}${esc(t.nome)}${t.id === pid ? " (você)" : ""}</b><span class="tag">💵 R$ ${t.dinheiro}</span></div>
     <div class="muted" style="font-size:12px;margin:2px 0 4px">${t.elenco.length}/${n} · ATQ ${t.r.ataque} · DEF ${t.r.defesa} · GERAL ${t.r.geral}${faltaTxt(t.falta) ? ` · falta: ${faltaTxt(t.falta)}` : ""}</div>
-    ${[...t.elenco].sort((a, b) => ORD[a.grupo] - ORD[b.grupo]).map((j) => `<div class="j"><span><span class="mini ${tier(j.ovr)}">${j.ovr}</span> ${j.flag} ${esc(j.nome)} <small class="muted">${esc(j.pos)}${j.preco ? " · R$ " + j.preco : ""}</small></span></div>`).join("")}</div>`;
+    ${[...t.elenco].sort((a, b) => ORD[a.grupo] - ORD[b.grupo]).map((j) => `<div class="j"><span><span class="mini ${tier(j.ovr)}">${j.ovr}</span> ${j.foto ? `<img class="jf" src="${j.foto}" alt="" onerror="this.remove()">` : j.flag} ${esc(j.nome)} <small class="muted">${esc(j.pos)}${j.preco ? " · R$ " + j.preco : ""}</small></span></div>`).join("")}</div>`;
   const agrupa = (l) => { const c = {}; l.forEach((x) => (c[x.nome] = (c[x.nome] || 0) + 1)); return Object.entries(c).map(([n, k]) => esc(n) + (k > 1 ? " " + k : "")).join(", "); };
   const jogoHTML = (g, nomeT) => `<div class="jogo"><span class="t">${esc(nomeT(g.a))}</span><span class="placar">${g.ga} x ${g.gb}</span><span class="t r">${esc(nomeT(g.b))}</span></div>
     ${g.golsA.length || g.golsB.length || g.pen ? `<div class="gols">${g.golsA.length ? "⚽ " + agrupa(g.golsA) : ""}${g.golsA.length && g.golsB.length ? " · " : ""}${g.golsB.length ? "⚽ " + agrupa(g.golsB) : ""}${g.pen ? `<br>Pênaltis: ${g.pen[0]} x ${g.pen[1]}` : ""}</div>` : ""}`;
