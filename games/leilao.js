@@ -171,6 +171,14 @@ module.exports = {
     st.timer = ctx.later(2200, () => this._proximo(st, ctx));
   },
   _pode(st, t, valor) { return !this._cheio(st, t) && this._falta(st, t, st.lote.j.grupo) > 0 && this._max(st, t) >= valor; },
+  // quem caiu passa a vez no lote automaticamente (ninguém fica esperando o timer à toa)
+  tick(st, ctx) {
+    if (st.fase !== "leilao" || !st.lote || st.lote.vendido) return false;
+    let mudou = false;
+    for (const t of st.times) if (!t.bot && !ctx.online(t.id) && !st.lote.passou.includes(t.id) && st.lote.lider !== t.id) { st.lote.passou.push(t.id); mudou = true; }
+    if (mudou) this._checaPasses(st, ctx);
+    return mudou;
+  },
   _checaPasses(st, ctx) {
     const L = st.lote;
     const ativos = st.times.filter((t) => t.id !== L.lider && this._pode(st, t, L.lider ? L.preco + 1 : L.preco));

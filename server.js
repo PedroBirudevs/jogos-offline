@@ -23,7 +23,8 @@ let lastResult = null;     // {titulo, linhas:[{nome, pontos}]}
 let timers = [];
 
 const now = () => Date.now();
-const online = (p) => p.conns.size > 0 || now() - p.lastSeen < 8000;
+// cada celular manda um "oi" a cada 4s; quem some por 12s conta como fora (conexão morta não engana mais)
+const online = (p) => now() - p.lastSeen < 12000;
 const nameOf = (id) => (players.get(id) || {}).name || "?";
 
 // endereços desta máquina: o do roteador (hotspot) vem primeiro
@@ -56,7 +57,21 @@ const ctx = {
   },
   cancel(t) { clearTimeout(t); timers = timers.filter((x) => x !== t); },
   finish(resultado) { lastResult = resultado || null; },
+  // quem está conectado agora (com 8s de tolerância) e há quanto tempo alguém caiu
+  online(id) { const p = players.get(id); return !!p && online(p); },
+  foraHa(id) { const p = players.get(id); if (!p) return 1e9; const d = now() - p.lastSeen; return d < 12000 ? 0 : d; },
 };
+
+// a cada 2s os jogos conferem se dá pra seguir sem quem caiu (ex.: todo mundo que está online já votou)
+let assinatura = "";
+setInterval(() => {
+  const g = game && GAMES[game.key];
+  let mudou = false;
+  if (g && g.tick) { try { mudou = !!g.tick(game.st, ctx); } catch (e) { console.error(e); } }
+  const sig = order.map((id) => (online(players.get(id)) ? 1 : 0)).join("");
+  if (sig !== assinatura) { assinatura = sig; mudou = true; }
+  if (mudou) broadcast();
+}, 2000);
 
 function ensureHost() {
   const h = players.get(hostId);
@@ -93,7 +108,9 @@ function act(pid, a) {
   if (a.type === "join") {
     const name = String(a.name || "").trim().slice(0, 16);
     if (!name) return "Digite um nome";
-    if ([...players.values()].some((x) => x.id !== pid && x.name.toLowerCase() === name.toLowerCase() && online(x))) return "Esse nome já está na sala";
+    // voltou? quem entra com o mesmo nome reassume o lugar (pontos, time, vez) — funciona até se o celular perdeu os dados
+    const antigo = [...players.values()].find((x) => x.id !== pid && x.name.toLowerCase() === name.toLowerCase());
+    if (antigo) { antigo.lastSeen = now(); return { pid: antigo.id }; }
     if (p) p.name = name;
     else { players.set(pid, { id: pid, name, conns: new Set(), lastSeen: now() }); order.push(pid); }
     if (!hostId) hostId = pid;
@@ -125,13 +142,14 @@ const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
   if (u.pathname === "/events") {
     const pid = String(u.searchParams.get("pid") || "");
-    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+    req.socket.setNoDelay(true); req.socket.setKeepAlive(true, 3000);
     res.write("retry: 1500\n\n");
     const p = players.get(pid);
     if (p) { p.conns.add(res); p.lastSeen = now(); } else anon.set(res, pid);
     send(res, pid);
     if (p) broadcast();
-    const ka = setInterval(() => { try { res.write(": ping\n\n"); } catch (e) {} }, 15000);
+    const ka = setInterval(() => { try { res.write("event: ping\ndata: " + now() + "\n\n"); } catch (e) {} }, 4000);
     req.on("close", () => { clearInterval(ka); anon.delete(res); const q = players.get(pid); if (q) { q.conns.delete(res); q.lastSeen = now(); setTimeout(broadcast, 8500); } });
     return;
   }
@@ -142,11 +160,16 @@ const server = http.createServer((req, res) => {
       let a = {};
       try { a = JSON.parse(body || "{}"); } catch (e) {}
       const pid = String(a.pid || "");
+      if (a.type === "oi") { // batimento: só marca que está vivo (o broadcast sai pelo vigia abaixo se alguém voltou/caiu)
+        const p = players.get(pid); if (p) p.lastSeen = now();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify(p ? { ok: true } : { sumiu: true }));
+      }
       let erro;
       try { erro = act(pid, a); } catch (e) { console.error(e); erro = "Erro: " + e.message; }
       // reconecta o canal do jogador recém-entrado
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(erro ? { erro } : { ok: true }));
+      res.end(JSON.stringify(erro && typeof erro === "object" ? erro : erro ? { erro } : { ok: true }));
       broadcast();
     });
     return;

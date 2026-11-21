@@ -49,6 +49,15 @@ module.exports = {
       return;
     }
   },
+  // quem ia explicar caiu faz 20s: pula pro próximo da fila
+  tick(st, ctx) {
+    if (st.fase === "pronto" && ctx.foraHa(st.ordem[st.i]) > 20000 && st.ordem.some((id) => ctx.online(id))) {
+      st.i++;
+      if (st.i >= st.ordem.length) { st.fase = "resumo"; st.i--; }
+      return true;
+    }
+    return false;
+  },
   _acabou(st) { if (st.fase !== "jogando") return; st.fase = "resumo"; st.hist.push({ exp: st.ordem[st.i], vez: st.vez }); },
   view(st, pid) {
     const nome = (id) => (st.jog.find((p) => p.id === id) || {}).name;

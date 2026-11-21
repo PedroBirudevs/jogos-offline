@@ -39,8 +39,7 @@ module.exports = {
     }
     if (a.type === "chute" && st.fase === "chute" && pid !== st.vidente && st.pts[pid] !== undefined) {
       st.chutes[pid] = Math.max(0, Math.min(100, Math.round(Number(a.valor))));
-      const faltam = st.jog.filter((p) => p.id !== st.vidente && st.chutes[p.id] === undefined);
-      if (!faltam.length) this._revelar(st, ctx);
+      if (this._todosChutaram(st, ctx)) this._revelar(st, ctx);
       return;
     }
     if (a.type === "revelar" && st.fase === "chute") { this._revelar(st, ctx); return; }
@@ -49,6 +48,13 @@ module.exports = {
       if (st.fase === "fim") this._fim(st, ctx);
       return;
     }
+  },
+  _todosChutaram(st, ctx) { return Object.keys(st.chutes).length > 0 && st.jog.every((p) => p.id === st.vidente || st.chutes[p.id] !== undefined || !ctx.online(p.id)); },
+  tick(st, ctx) {
+    if (st.fase === "chute" && this._todosChutaram(st, ctx)) { this._revelar(st, ctx); return true; }
+    // quem ia dar a dica caiu faz 20s: passa a vez pro próximo
+    if ((st.fase === "girar" || st.fase === "dica") && ctx.foraHa(st.vidente) > 20000) { this._nova(st); if (st.fase === "fim") this._fim(st, ctx); return true; }
+    return false;
   },
   _revelar(st, ctx) {
     st.ganhos = {};

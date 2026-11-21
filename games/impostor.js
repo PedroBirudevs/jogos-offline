@@ -37,7 +37,7 @@ module.exports = {
       if (a.alvo === pid) return "Não pode votar em você mesmo";
       if (!st.jog.some((p) => p.id === a.alvo)) return;
       st.votos[pid] = a.alvo;
-      if (Object.keys(st.votos).length >= st.jog.length) this._apurar(st);
+      if (this._todosVotaram(st, ctx)) this._apurar(st);
       return;
     }
     if (a.type === "apurar" && st.fase === "votacao") { this._apurar(st); return; }
@@ -53,6 +53,9 @@ module.exports = {
       st.fase = "encerrado"; return;
     }
   },
+  // só espera quem está conectado: se alguém caiu, o resto não fica travado
+  _todosVotaram(st, ctx) { return Object.keys(st.votos).length > 0 && st.jog.every((p) => st.votos[p.id] !== undefined || !ctx.online(p.id)); },
+  tick(st, ctx) { if (st.fase === "votacao" && this._todosVotaram(st, ctx)) { this._apurar(st); return true; } return false; },
   _apurar(st) {
     const cont = {};
     for (const v of Object.values(st.votos)) cont[v] = (cont[v] || 0) + 1;

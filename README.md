@@ -9,7 +9,7 @@ Jogos: ⚽ Leilão OVER (estilo 100pracada: R$ 100 pra cada, lances de 10s, bots
 1. Instale o **Termux** pela F-Droid (https://f-droid.org/packages/com.termux/). A versão da Play Store é antiga.
 2. Abra o Termux e cole:
 ```
-pkg update -y && pkg install -y nodejs-lts git && git clone https://github.com/PedroBirudevs/jogos-offline ~/jogos-offline && echo "alias jogo='cd ~/jogos-offline && node server.js'" >> ~/.bashrc && echo PRONTO
+pkg update -y && pkg install -y nodejs-lts git && git clone https://github.com/PedroBirudevs/jogos-offline ~/jogos-offline && echo "alias jogo='cd ~/jogos-offline && termux-wake-lock; node server.js'" >> ~/.bashrc && echo PRONTO
 ```
 
 ## Na viagem (sem internet)
@@ -43,7 +43,22 @@ cd ~/jogos-offline && node tools/baixar-fotos.js
 ```
 Demora uns 5–10 min. Quem não tiver foto livre na Wikipédia continua com as iniciais. Rodar de novo só baixa o que falta.
 
+## Se o pessoal cai toda hora (estrada com sinal que vai e volta)
+O motivo quase sempre é este: o Wi-Fi do roteador do celular **não tem internet**. Quando aparece sinal de celular,
+o Android/iPhone dos amigos passa a usar os **dados móveis** e para de enxergar o jogo; quando o sinal some, volta pro Wi-Fi. Fica nesse vai-e-volta.
+- **Todo mundo que vai jogar: desliga os dados móveis** (ou modo avião e liga só o Wi-Fi). Se o celular perguntar "Wi-Fi sem internet", toca em **manter conectado**.
+- iPhone: Ajustes > Celular > desligar "Assistência Wi-Fi" (ou desligar dados celulares).
+- **Dono da sala:** desliga os dados móveis também (assim o Wi-Fi fica "sem internet" o tempo todo e ninguém fica trocando),
+  desliga o "desligar roteador automaticamente" nas configurações do roteador e deixa o celular carregando.
+- No Termux use `termux-wake-lock` antes de `node server.js` (o alias `jogo` já faz isso) pra o Android não pausar o servidor com a tela apagada.
+
+O jogo agora se vira com quem cai: reconecta sozinho, mostra "reconectando…", e quem cair pode entrar de novo **com o mesmo nome**
+(ou tocar no nome na tela de entrada) que volta pro mesmo lugar, com pontos e respostas. Votações e vezes não ficam esperando quem caiu.
+
+Com 7+ pessoas, um **mini roteador de viagem** (ex.: GL.iNet Mango ou TP-Link TL-WR902AC, ligado num power bank) aguenta melhor que o roteador do celular:
+liga o roteador, todo mundo (inclusive o dono da sala) conecta nele e o jogo roda no celular do dono do mesmo jeito.
+
 ## Stop: quem corrige
 - **Juiz automático** (padrão): confere cada resposta num dicionário offline (`data/dicionario.json`: municípios e estados do IBGE, nomes do Censo, países, jogadores e clubes do Leilão e listas de animais, comidas, cores, profissões, marcas…). Aceita sem acento, plural e um erro de digitação. Só sorteia temas que ele sabe conferir. Se ele errar, a galera toca na resposta e muda por maioria.
-- **Votação**: 10s por tema pra tirar as respostas erradas; quando todo mundo aperta "Pronto", pula pro próximo.
+- **Votação**: todos os temas na mesma tela, um relógio só; cada um marca as erradas e aperta "Pronto". Fecha quando todo mundo (que está conectado) apertou, quando o tempo acaba ou quando o dono da sala encerra.
 - Pra aumentar o dicionário, edite `tools/listas_stop.py` e rode `python3 tools/build_dicionario.py municipios.csv estados.csv nomes-censos-ibge.csv`.

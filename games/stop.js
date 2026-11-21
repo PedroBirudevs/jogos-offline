@@ -109,14 +109,19 @@ module.exports = {
         st.auto[p.id + ":" + c] = !letraOk ? false : st.juiz ? confere(cat, st.resp[p.id][c]) !== false : true;
       });
       if (st.juiz) { st.fase = "correcao"; return; }
-      st.fase = "votacao"; this._tema(st, 0, ctx);
+      // votação: TODOS os temas na mesma tela, um relógio só. Ninguém "passa na frente" de ninguém.
+      st.fase = "votacao"; st.prontos = [];
+      const dur = Math.min(150, 15 * st.cats.length) * 1000;
+      st.fim = ctx.now() + dur;
+      st.timerVot = ctx.later(dur, () => { if (st.fase === "votacao") this._fimVotacao(st, ctx); });
     });
   },
-  _tema(st, ci, ctx) {
-    ctx.cancel(st.timerTema);
-    if (ci >= st.cats.length) { st.fase = "correcao"; return; }
-    st.ci = ci; st.prontos = []; st.fim = ctx.now() + 10000;
-    st.timerTema = ctx.later(10000, () => { if (st.fase === "votacao" && st.ci === ci) this._tema(st, ci + 1, ctx); });
+  _fimVotacao(st, ctx) { ctx.cancel(st.timerVot); st.fase = "correcao"; },
+  // quem ainda falta apertar "Pronto" (só conta quem está conectado — quem caiu não trava ninguém)
+  _faltam(st, ctx) { return st.jog.filter((p) => !st.prontos.includes(p.id) && ctx.online(p.id)); },
+  tick(st, ctx) {
+    if (st.fase === "votacao" && st.prontos.length && !this._faltam(st, ctx).length) { this._fimVotacao(st, ctx); return true; }
+    return false;
   },
   _maioria(st) { return Math.max(1, Math.ceil((st.jog.length - 1) / 2)); },
   _valida(st, pid, c) {
@@ -147,11 +152,12 @@ module.exports = {
       this._parar(st, pid, ctx); return;
     }
     if (a.type === "pronto" && st.fase === "votacao") {
-      if (!st.prontos.includes(pid)) st.prontos.push(pid);
-      if (st.prontos.length >= st.jog.length) this._tema(st, st.ci + 1, ctx);
+      const i = st.prontos.indexOf(pid); if (i >= 0) st.prontos.splice(i, 1); else st.prontos.push(pid); // toca de novo pra desfazer
+      if (!this._faltam(st, ctx).length) this._fimVotacao(st, ctx);
       return;
     }
-    if (a.type === "marcar" && (st.fase === "correcao" || (st.fase === "votacao" && a.c === st.ci))) {
+    if (a.type === "encerrarVotacao" && st.fase === "votacao") { this._fimVotacao(st, ctx); return; }
+    if (a.type === "marcar" && (st.fase === "votacao" || (st.fase === "correcao" && st.juiz))) {
       const k = a.alvo + ":" + a.c; if (a.alvo === pid) return "Não dá pra marcar a sua";
       if (!norm(st.resp[a.alvo][a.c])) return;
       const m = st.marcas[k] = st.marcas[k] || [];
@@ -168,7 +174,7 @@ module.exports = {
     }
   },
   _placar(st) { return st.jog.map((p) => ({ id: p.id, nome: p.name, pts: st.pts[p.id] })).sort((a, b) => b.pts - a.pts); },
-  view(st, pid) {
+  view(st, pid, ctx) {
     const nome = (id) => (st.jog.find((p) => p.id === id) || {}).name;
     const v = { juiz: st.juiz, maioria: this._maioria(st), fase: st.fase, r: st.r, rodadas: st.rodadas, letra: st.fase === "contagem" ? null : st.letra, cats: st.cats, fim: st.fim, jogando: st.pts[pid] !== undefined, quemParou: st.quemParou ? nome(st.quemParou) : null, placar: this._placar(st) };
     if (v.jogando) v.minhas = st.resp[pid];
@@ -178,10 +184,11 @@ module.exports = {
         motivo: !v0 ? "" : v0[0] !== st.letra.toLowerCase() ? "letra errada" : st.auto && st.auto[k] === false ? "não existe / não é do tema" : "" };
     };
     if (st.fase === "votacao") {
-      v.ci = st.ci; v.fim = st.fim; v.prontos = st.prontos.length; v.souPronto = st.prontos.includes(pid);
-      v.tema = { cat: st.cats[st.ci], linhas: st.jog.map((p) => linha(p, st.ci)) };
+      v.fim = st.fim; v.souPronto = st.prontos.includes(pid);
+      v.faltam = this._faltam(st, ctx).map((p) => p.name);
+      v.prontosN = st.prontos.length;
     }
-    if (st.fase === "correcao") {
+    if (st.fase === "votacao" || st.fase === "correcao") {
       v.tabela = st.cats.map((cat, c) => ({ cat, linhas: st.jog.map((p) => linha(p, c)) }));
       v.rodadaPts = Object.fromEntries(st.jog.map((p) => [p.id, st.cats.reduce((s, _, c) => s + this._pontos(st, p.id, c), 0)]));
     }

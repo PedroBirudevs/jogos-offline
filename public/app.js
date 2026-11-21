@@ -8,11 +8,48 @@
   let S = null, off = 0, es = null;
   const local = {}; // estado só deste celular (rascunhos)
 
+  // ---------- conexão que se recupera sozinha ----------
+  // o celular troca de rede, apaga a tela, perde o Wi-Fi por uns segundos… o canal morre sem avisar.
+  // Então: o servidor manda "ping" a cada 4s; se passar 10s sem nada, a gente reabre o canal.
+  let ultimo = 0, tentativas = 0;
   function conectar() {
-    if (es) es.close();
+    if (es) { try { es.close(); } catch (e) {} }
+    ultimo = Date.now();
     es = new EventSource("/events?pid=" + encodeURIComponent(pid));
-    es.onmessage = (e) => { S = JSON.parse(e.data); off = S.now - Date.now(); render(); };
-    es.onerror = () => { const a = $("#app"); if (!S && a) a.innerHTML = `<div class="center muted" style="padding:40px">Procurando o jogo… confira se está no Wi-Fi certo.</div>`; };
+    es.onopen = () => { tentativas = 0; ultimo = Date.now(); status(true); };
+    es.onmessage = (e) => { ultimo = Date.now(); S = JSON.parse(e.data); off = S.now - Date.now(); status(true); render(); };
+    es.addEventListener("ping", () => { ultimo = Date.now(); status(true); });
+    es.onerror = () => { status(false); const a = $("#app"); if (!S && a) a.innerHTML = `<div class="center muted" style="padding:40px">Procurando o jogo… confira se está no Wi-Fi do dono da sala.</div>`; };
+  }
+  setInterval(() => {
+    const parado = Date.now() - ultimo;
+    if (parado > 6000) status(false);
+    if (parado > 10000 || (es && es.readyState === 2)) { tentativas++; conectar(); }
+  }, 2000);
+  // batimento: diz pro dono da sala "ainda estou aqui"
+  setInterval(async () => {
+    if (!S || !me()) return;
+    try {
+      const r = await fetch("/api/act", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "oi", pid }) });
+      const j = await r.json(); if (j.sumiu) { lastHTML = ""; S.players = S.players.filter((p) => p.id !== pid); render(); }
+    } catch (e) {}
+  }, 4000);
+  const reabrir = () => { if (Date.now() - ultimo > 3000) conectar(); };
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) reabrir(); });
+  window.addEventListener("online", reabrir);
+  window.addEventListener("focus", reabrir);
+  window.addEventListener("pageshow", reabrir);
+  let ligado = true;
+  function status(ok) {
+    if (ok === ligado) return; ligado = ok;
+    let b = document.getElementById("conn");
+    if (!b) { b = document.createElement("div"); b.id = "conn"; document.body.appendChild(b); }
+    b.className = ok ? "ok" : "off";
+    b.textContent = ok ? "✅ Conectado de novo" : "📡 Sem sinal do dono da sala… reconectando sozinho";
+    if (ok) {
+      setTimeout(() => { if (ligado) b.className = "hide"; }, 1500);
+      if (S && S.game && S.game.key === "stop" && document.getElementById("st0")) setTimeout(() => FN.stopIn && FN.stopIn(), 300);
+    }
   }
   async function send(a) {
     try {
@@ -20,7 +57,7 @@
       const j = await r.json();
       if (j.erro) toast(j.erro);
       return j;
-    } catch (e) { toast("Sem conexão com o dono da sala"); return { erro: "rede" }; }
+    } catch (e) { toast("Não chegou no dono da sala — confere o Wi-Fi e toca de novo"); reabrir(); return { erro: "rede" }; }
   }
   window.J = { send };
   let tt;
@@ -70,14 +107,17 @@
   function telaEntrar() {
     return `<div class="top"><div class="logo">Jogos de <span>Viagem</span></div></div>
     <div class="card"><h2>Bora jogar! 🚗</h2><p class="muted">Todo mundo no mesmo Wi-Fi do celular do dono da sala. Não precisa de internet.</p>
-    <label class="l" for="nomeIn">Seu nome</label><input id="nomeIn" maxlength="16" placeholder="Ex.: Biru" autocomplete="off">
+    <label class="l" for="nomeIn">Seu nome</label><input id="nomeIn" maxlength="16" placeholder="Ex.: Biru" autocomplete="off" value="${esc((() => { try { return localStorage.getItem("jv_nome") || ""; } catch (e) { return ""; } })())}">
     <div style="margin-top:12px"><button class="btn full" data-fn="entrar">Entrar na sala</button></div></div>
-    ${S && S.players.length ? `<div class="card"><div class="muted" style="margin-bottom:8px">Já estão na sala:</div><div class="row">${S.players.map((p) => `<span class="pill">${esc(p.name)}</span>`).join("")}</div></div>` : ""}`;
+    ${S && S.players.length ? `<div class="card"><div class="muted" style="margin-bottom:8px">${S.game ? "Caiu da sala? Toque no seu nome pra voltar pro seu lugar:" : "Já estão na sala (caiu? toque no seu nome):"}</div><div class="row">${S.players.map((p) => `<button class="pill ${p.online ? "" : "off"}" data-fn="souEu" data-n="${esc(p.name)}">${av(p.id, p.name, 22)} ${esc(p.name)}${p.online ? "" : " · caiu"}</button>`).join("")}</div></div>` : ""}`;
   }
+  FN.souEu = (b) => { $("#nomeIn").value = b.dataset.n; FN.entrar(); };
   FN.entrar = async () => {
     const n = $("#nomeIn").value.trim(); if (!n) return toast("Digite seu nome");
     try { localStorage.setItem("jv_nome", n); } catch (e) {}
-    const r = await send({ type: "join", name: n }); if (!r.erro) conectar();
+    const r = await send({ type: "join", name: n });
+    if (r.pid) { pid = r.pid; try { localStorage.setItem("jv_pid", pid); } catch (e) {} toast("Bem-vindo de volta! Você voltou pro seu lugar"); }
+    if (!r.erro) { lastHTML = ""; conectar(); }
   };
 
   // ---------- Sala ----------
@@ -96,7 +136,7 @@
     const url = local ? (S.enderecos || [])[0] : location.origin;
     if (!url) return `<div class="card convite"><b>📶 Chame a galera</b><p class="muted" style="margin:6px 0 0">Ligue o <b style="color:var(--txt)">roteador Wi-Fi</b> deste celular e rode <code>jogo</code> de novo no Termux. Aí aparece o QR code aqui.</p></div>`;
     HOOKS.push(() => { const el = document.getElementById("qr"); if (el && window.qrcode && el.dataset.u !== url) { const q = qrcode(0, "M"); q.addData(url); q.make(); el.innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); el.dataset.u = url; } });
-    return `<div class="card convite"><div class="qr" id="qr"></div><div><b>📶 Chame a galera</b><p class="muted" style="margin:6px 0">1. Conecta no Wi-Fi deste celular<br>2. Aponta a câmera pro QR code</p><div class="url">${esc(url.replace("http://", ""))}</div></div></div>`;
+    return `<div class="card convite"><div class="qr" id="qr"></div><div><b>📶 Chame a galera</b><p class="muted" style="margin:6px 0">1. <b style="color:var(--txt)">Desliga os dados móveis</b><br>2. Conecta no Wi-Fi deste celular (se perguntar, "manter conectado")<br>3. Aponta a câmera pro QR code</p><div class="url">${esc(url.replace("http://", ""))}</div></div></div>`;
   }
   FN.sair = () => { if (confirm("Sair da sala?")) send({ type: "leave" }).then(() => { lastHTML = ""; conectar(); }); };
   FN.abrir = (b) => {
@@ -341,7 +381,8 @@
     if (v.fase === "contagem") return `<div class="card center"><div class="muted">Rodada ${v.r}/${v.rodadas}</div><div class="letra roleta" id="roleta">A</div><p>Sorteando a letra… <b class="timer" data-fim="${v.fim}"></b></p><div class="row" style="justify-content:center">${v.cats.map((c) => `<span class="pill">${esc(c)}</span>`).join("")}</div></div>` + pl;
     if (v.fase === "escrevendo" || v.fase === "parou") {
       const trava = v.fase === "parou";
-      if (local.stopR !== v.r) { local.stopR = v.r; HOOKS.push(() => v.cats.forEach((_, i) => { const el = $("#st" + i); if (el) el.value = ""; })); }
+      // rodada nova: limpa; voltou depois de cair/recarregar: puxa o que já tinha escrito (fica salvo no dono da sala)
+      if (local.stopR !== v.r) { local.stopR = v.r; const m = v.minhas || []; HOOKS.push(() => v.cats.forEach((_, i) => { const el = $("#st" + i); if (el) el.value = m[i] || ""; })); }
       return `<div class="card"><div class="row" style="justify-content:space-between"><span class="muted">Rodada ${v.r}/${v.rodadas}</span>${trava ? `<b style="color:var(--red)">STOP! ${esc(v.quemParou || "Tempo")} — <span class="timer" data-fim="${v.fim}"></span></b>` : `<span>⏱ <b class="timer" data-fim="${v.fim}"></b></span>`}</div>
         <div class="letra ${local.popR !== v.r ? ((local.popR = v.r), "pop") : ""}">${v.letra}</div>
         ${v.cats.map((c, i) => `<div class="ans"><label class="l" for="st${i}">${esc(c)}</label><input id="st${i}" data-in="stopIn" autocomplete="off" autocapitalize="words" placeholder="${v.letra}…"></div>`).join("")}
@@ -349,15 +390,19 @@
     }
     const cel = (l, c) => `<div class="cell ${l.pts === 0 ? "inv" : ""} ${l.eu ? "mark" : ""}" ${l.id !== pid && l.txt ? `data-a='${A({ type: "marcar", alvo: l.id, c })}'` : ""}><span><small class="muted">${esc(l.nome)}:</small> ${esc(l.txt) || "—"}${l.motivo ? `<br><small style="color:var(--red);display:inline-block">${v.juiz ? "🤖" : "⚠️"} ${esc(l.motivo)}</small>` : ""}</span><span>${l.marcas ? `<small style="color:var(--red)">${v.juiz ? "🔁" : "❌"}${l.marcas}/${v.maioria}</small> ` : ""}<span class="pt">${l.pts}</span></span></div>`;
     if (v.fase === "votacao") {
-      const t = v.tema;
-      return `<div class="card"><div class="row" style="justify-content:space-between"><span class="muted">Letra ${v.letra} · tema ${v.ci + 1}/${v.cats.length}</span><span>⏱ <b class="timer" data-fim="${v.fim}"></b></span></div>
-        <h2 style="margin:6px 0">${esc(t.cat)}</h2><p class="muted" style="margin:0 0 8px">Toque nas respostas erradas pra tirar (precisa de ${v.maioria} voto${v.maioria > 1 ? "s" : ""}).</p>
-        ${t.linhas.map((l) => cel(l, v.ci)).join("")}
-        <button class="btn ${v.souPronto ? "alt" : "green"} full" style="margin-top:10px" data-a='${A({ type: "pronto" })}' ${v.souPronto ? "disabled" : ""}>${v.souPronto ? `Esperando a galera (${v.prontos}/${v.placar.length})` : "✅ Pronto, próximo tema"}</button></div>` + pl;
+      const souHost = S.hostId === pid;
+      return `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">🗳️ Votação — letra ${v.letra}</h2><span>⏱ <b class="timer" data-fim="${v.fim}"></b></span></div>
+        <p class="muted" style="margin:6px 0 0">Toque nas respostas <b style="color:var(--txt)">erradas</b> pra tirar (precisa de ${v.maioria} voto${v.maioria > 1 ? "s" : ""}). Todo mundo vê os mesmos temas, no seu ritmo. Quando terminar, aperta <b style="color:var(--txt)">Pronto</b>.</p></div>
+        ${v.tabela.map((t, c) => `<div class="card"><b>${esc(t.cat)}</b>${t.linhas.map((l) => cel(l, c)).join("")}</div>`).join("")}
+        <div class="card sticky-bot">
+          <button class="btn ${v.souPronto ? "alt" : "green"} full" data-a='${A({ type: "pronto" })}'>${v.souPronto ? "↩️ Ainda não, quero mexer" : "✅ Pronto, terminei de votar"}</button>
+          <p class="center muted" style="margin:8px 0 0">${v.faltam.length ? `Esperando: ${v.faltam.map(esc).join(", ")}` : "Fechando…"}</p>
+          ${souHost ? `<button class="btn sm alt full" style="margin-top:8px" data-a='${A({ type: "encerrarVotacao", confirm: "Encerrar a votação agora pra todo mundo?" })}'>👑 Encerrar votação agora</button>` : ""}
+        </div>` + pl;
     }
     if (v.fase === "correcao") {
-      return `<div class="card"><h2>${v.juiz ? "🤖 Juiz automático" : "Resultado"} — letra ${v.letra}</h2><p class="muted" style="margin:4px 0 0">${v.juiz ? `O juiz já tirou o que não existe ou não é do tema. Discorda? Toque na resposta: com ${v.maioria} voto${v.maioria > 1 ? "s" : ""} ela muda.` : "Ainda dá pra tocar numa resposta pra tirar."} Igual = 5, única = 10.</p></div>
-        ${v.tabela.map((t, c) => `<div class="card"><b>${esc(t.cat)}</b>${t.linhas.map((l) => cel(l, c)).join("")}</div>`).join("")}
+      return `<div class="card"><h2>${v.juiz ? "🤖 Juiz automático" : "Resultado da votação"} — letra ${v.letra}</h2><p class="muted" style="margin:4px 0 0">${v.juiz ? `O juiz já tirou o que não existe ou não é do tema. Discorda? Toque na resposta: com ${v.maioria} voto${v.maioria > 1 ? "s" : ""} ela muda.` : "Votação fechada."} Igual = 5, única = 10.</p></div>
+        ${v.tabela.map((t, c) => `<div class="card"><b>${esc(t.cat)}</b>${t.linhas.map((l) => (v.juiz ? cel(l, c) : cel({ ...l, id: pid }, c))).join("")}</div>`).join("")}
         <div class="card"><b>Pontos da rodada</b><div class="list" style="margin-top:6px">${Object.entries(v.rodadaPts).map(([id, p]) => `<div class="li"><span>${esc(nome(id))}</span><b>+${p}</b></div>`).join("")}</div></div>
         <button class="btn full" data-a='${A({ type: "proxima" })}'>${v.r >= v.rodadas ? "Ver resultado" : "Próxima rodada"}</button>` + pl;
     }

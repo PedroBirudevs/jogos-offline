@@ -49,8 +49,7 @@ module.exports = {
     }
     if (st.fase === "julgamento" && a.type === "voto" && pid !== st.dono && st.pts[pid] !== undefined) {
       st.votos[pid] = !!a.valeu;
-      const juizes = st.jog.filter((p) => p.id !== st.dono);
-      if (Object.keys(st.votos).length >= juizes.length) this._resolver(st);
+      if (this._julgaram(st, ctx)) this._resolver(st);
       return;
     }
     if (a.type === "proxima" && st.fase === "resultado") {
@@ -60,6 +59,13 @@ module.exports = {
       } else this._nova(st);
       return;
     }
+  },
+  _julgaram(st, ctx) { return Object.keys(st.votos).length > 0 && st.jog.every((p) => p.id === st.dono || st.votos[p.id] !== undefined || !ctx.online(p.id)); },
+  tick(st, ctx) {
+    if (st.fase === "julgamento" && this._julgaram(st, ctx)) { this._resolver(st); return true; }
+    // a vez é de quem caiu faz 20s: pula pro próximo
+    if (st.fase === "lances" && ctx.foraHa(this._atual(st)) > 20000 && st.jog.some((p) => ctx.online(p.id))) { st.vez++; return true; }
+    return false;
   },
   _fimProva(st) {
     if (st.cont >= st.lance) { st.fase = "julgamento"; st.votos = {}; }

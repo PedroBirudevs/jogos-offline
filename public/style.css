@@ -163,3 +163,10 @@ code{background:var(--p2);padding:2px 6px;border-radius:6px}
 .fut-av{position:relative;overflow:hidden}
 .fut-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 18%;z-index:1}
 .jf{width:24px;height:24px;border-radius:50%;object-fit:cover;object-position:50% 15%;vertical-align:middle;margin:0 2px}
+
+#conn{position:fixed;left:50%;top:8px;transform:translateX(-50%);z-index:99;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:92vw;text-align:center;transition:opacity .3s}
+#conn.off{background:#ff5d6c;color:#fff}
+#conn.ok{background:#3ddc84;color:#06210f}
+#conn.hide{opacity:0;pointer-events:none}
+button.pill{font:inherit;color:inherit;cursor:pointer}
+.sticky-bot{position:sticky;bottom:8px;z-index:5;box-shadow:0 -6px 24px rgba(0,0,0,.45)}
