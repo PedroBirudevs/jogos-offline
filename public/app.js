@@ -26,13 +26,20 @@
     if (parado > 6000) status(false);
     if (parado > 10000 || (es && es.readyState === 2)) { tentativas++; conectar(); }
   }, 2000);
-  // batimento: diz pro dono da sala "ainda estou aqui"
+  // batimento: diz pro dono da sala "ainda estou aqui" e mede a conexão (pro teste de conexão da sala)
+  const NET = { ping: 0, hist: [], falhas: 0, quedas: 0 };
+  const tipo = /iPhone|iPad/.test(navigator.userAgent) ? "iPhone" : /Android/.test(navigator.userAgent) ? "Android" : "PC";
   setInterval(async () => {
     if (!S || !me()) return;
+    const t0 = performance.now();
     try {
-      const r = await fetch("/api/act", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "oi", pid }) });
+      const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 3500);
+      const media = NET.hist.length ? Math.round(NET.hist.reduce((s, x) => s + x, 0) / NET.hist.length) : 0;
+      const r = await fetch("/api/act", { method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "oi", pid, net: { ping: NET.ping, media, falhas: NET.falhas, quedas: NET.quedas, ua: tipo } }) });
+      clearTimeout(to);
+      NET.ping = Math.round(performance.now() - t0); NET.hist.push(NET.ping); if (NET.hist.length > 15) NET.hist.shift();
       const j = await r.json(); if (j.sumiu) { lastHTML = ""; S.players = S.players.filter((p) => p.id !== pid); render(); }
-    } catch (e) {}
+    } catch (e) { NET.falhas++; }
   }, 4000);
   const reabrir = () => { if (Date.now() - ultimo > 3000) conectar(); };
   document.addEventListener("visibilitychange", () => { if (!document.hidden) reabrir(); });
@@ -42,6 +49,7 @@
   let ligado = true;
   function status(ok) {
     if (ok === ligado) return; ligado = ok;
+    if (!ok) NET.quedas++;
     let b = document.getElementById("conn");
     if (!b) { b = document.createElement("div"); b.id = "conn"; document.body.appendChild(b); }
     b.className = ok ? "ok" : "off";
@@ -127,10 +135,30 @@
     <div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Na sala (${S.players.filter((p) => p.online).length})</b><small class="muted">👑 = dono da sala</small></div>
       <div class="row">${S.players.map((p) => `<span class="pill ${p.online ? "" : "off"} ${p.id === pid ? "me" : ""}">${av(p.id, p.name, 24)} ${p.id === S.hostId ? "👑 " : ""}${esc(p.name)}</span>`).join("")}</div></div>
     ${convite()}
+    ${testeConexao()}
     ${lr ? `<div class="card"><h3 style="margin-bottom:8px">${esc(lr.titulo)}</h3><div class="list">${(lr.linhas || []).map((l, i) => `<div class="li"><span>${i + 1}. ${esc(l.nome)}</span><b>${esc(l.pontos)}</b></div>`).join("")}</div></div>` : ""}
     <h3 style="margin:16px 4px 10px">Escolha o jogo</h3>
     <div class="games">${S.jogos.map((g) => `<button class="game" data-fn="abrir" data-k="${g.key}"><img class="capa" src="/capas/${g.key}.svg" alt=""><div class="gi"><b>${g.emoji} ${esc(g.nome)}</b><small>${esc(g.desc)}</small><small class="minj">${g.min > 1 ? `mín. ${g.min} jogadores` : "dá pra jogar com bots"}</small></div></button>`).join("")}</div>`;
   }
+  // ---------- teste de conexão (fica na sala, atualiza a cada 4s) ----------
+  function testeConexao() {
+    const nota = (p) => {
+      if (!p.online) return ["🔴", "caiu", "var(--red)"];
+      const n = p.net; if (!n || !n.ping) return ["⚪", "medindo…", "var(--mut)"];
+      if (n.quedas >= 3 || n.falhas >= 3 || n.media > 600) return ["🔴", "ruim", "var(--red)"];
+      if (n.quedas >= 1 || n.falhas >= 1 || n.media > 250) return ["🟡", "instável", "#ffcf3f"];
+      return ["🟢", "boa", "#3ddc84"];
+    };
+    const eu = S.players.find((p) => p.id === pid) || {};
+    const [, minha] = nota(eu);
+    const dica = minha === "ruim" || minha === "instável" ? `<p style="margin:8px 0 0;color:#ffcf3f"><b>Sua conexão está ${minha}.</b> Desliga os dados móveis, chega mais perto do dono da sala e, se for iPhone, deixa "Endereço Wi-Fi Privado" desativado nessa rede.</p>` : "";
+    return `<details class="card" ${local.abrirTeste ? "open" : ""} id="testeBox"><summary style="cursor:pointer"><b>📶 Teste de conexão</b> <small class="muted">— toque pra ver</small></summary>
+      <p class="muted" style="margin:8px 0">Deixa todo mundo nessa tela 1–2 minutos (até andando com o carro). Ping = tempo de resposta. Quedas = vezes que o celular perdeu o jogo.</p>
+      <div class="list">${S.players.map((p) => { const [b, txt, cor] = nota(p), n = p.net || {}; return `<div class="li"><span>${b} ${esc(p.name)} <small class="muted">${esc(n.ua || "")}</small></span><span style="text-align:right"><b style="color:${cor}">${txt}</b><br><small class="muted">${p.online ? `ping ${n.media || n.ping || "–"} ms · quedas ${n.quedas || 0} · falhas ${n.falhas || 0}` : `sem sinal há ${p.visto}s`}</small></span></div>`; }).join("")}</div>
+      ${dica}
+      <p class="muted" style="margin:8px 0 0;font-size:13px">🟢 até ~250 ms e nenhuma queda · 🟡 caiu 1–2 vezes ou lento · 🔴 caindo direto: veja as dicas de Wi-Fi</p></details>`;
+  }
+  document.addEventListener("toggle", (e) => { if (e.target && e.target.id === "testeBox") local.abrirTeste = e.target.open; }, true);
   function convite() {
     const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
     const url = local ? (S.enderecos || [])[0] : location.origin;

@@ -63,13 +63,14 @@ const ctx = {
 };
 
 // a cada 2s os jogos conferem se dá pra seguir sem quem caiu (ex.: todo mundo que está online já votou)
-let assinatura = "";
+let assinatura = "", voltasSala = 0;
 setInterval(() => {
   const g = game && GAMES[game.key];
   let mudou = false;
   if (g && g.tick) { try { mudou = !!g.tick(game.st, ctx); } catch (e) { console.error(e); } }
   const sig = order.map((id) => (online(players.get(id)) ? 1 : 0)).join("");
   if (sig !== assinatura) { assinatura = sig; mudou = true; }
+  if (!game && ++voltasSala % 2 === 0) mudou = true; // na sala: atualiza o painel de conexão a cada 4s
   if (mudou) broadcast();
 }, 2000);
 
@@ -89,7 +90,7 @@ function stateFor(pid) {
     now: now(),
     me: pid,
     hostId,
-    players: order.map((id) => players.get(id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name, online: online(p) })),
+    players: order.map((id) => players.get(id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name, online: online(p), visto: Math.round((now() - p.lastSeen) / 1000), net: p.net || null })),
     jogos: Object.values(GAMES).sort((a, b) => (a.ordem || 9) - (b.ordem || 9)).map((g) => ({ key: g.key, nome: g.nome, emoji: g.emoji, desc: g.desc, min: g.min || 2, opcoes: g.opcoes || [] })),
     game: g ? { key: game.key, nome: g.nome, emoji: g.emoji, view } : null,
     enderecos: game ? undefined : enderecos().filter((e) => e.tipo !== "dados").map((e) => `http://${e.ip}:${PORT}`),
@@ -161,7 +162,7 @@ const server = http.createServer((req, res) => {
       try { a = JSON.parse(body || "{}"); } catch (e) {}
       const pid = String(a.pid || "");
       if (a.type === "oi") { // batimento: só marca que está vivo (o broadcast sai pelo vigia abaixo se alguém voltou/caiu)
-        const p = players.get(pid); if (p) p.lastSeen = now();
+        const p = players.get(pid); if (p) { p.lastSeen = now(); if (a.net && typeof a.net === "object") p.net = { ping: +a.net.ping || 0, media: +a.net.media || 0, falhas: +a.net.falhas || 0, quedas: +a.net.quedas || 0, ua: String(a.net.ua || "").slice(0, 20) }; }
         res.writeHead(200, { "Content-Type": "application/json" });
         return res.end(JSON.stringify(p ? { ok: true } : { sumiu: true }));
       }
