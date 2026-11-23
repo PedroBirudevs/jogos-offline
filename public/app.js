@@ -3,6 +3,8 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   let pid = null;
   try { pid = localStorage.getItem("jv_pid"); } catch (e) {}
+  // o endereço da página guarda quem você é (?eu=...): se o navegador apagar os dados, o link ainda lembra
+  try { const q = new URLSearchParams(location.search).get("eu"); if (q && !pid) pid = q; } catch (e) {}
   if (!pid) { pid = Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem("jv_pid", pid); } catch (e) {} }
 
   let S = null, off = 0, es = null;
@@ -12,6 +14,11 @@
   // o celular troca de rede, apaga a tela, perde o Wi-Fi por uns segundos… o canal morre sem avisar.
   // Então: o servidor manda "ping" a cada 4s; se passar 10s sem nada, a gente reabre o canal.
   let ultimo = 0, tentativas = 0;
+  function souEu(novo) {
+    pid = novo; lastHTML = "";
+    try { localStorage.setItem("jv_pid", pid); } catch (e) {}
+    try { const u = new URL(location.href); u.searchParams.set("eu", pid); history.replaceState(null, "", u); } catch (e) {}
+  }
   function conectar() {
     if (es) { try { es.close(); } catch (e) {} }
     ultimo = Date.now();
@@ -19,6 +26,8 @@
     es.onopen = () => { tentativas = 0; ultimo = Date.now(); status(true); };
     es.onmessage = (e) => { ultimo = Date.now(); S = JSON.parse(e.data); off = S.now - Date.now(); status(true); render(); };
     es.addEventListener("ping", () => { ultimo = Date.now(); status(true); });
+    // o dono da sala reconheceu este celular (mesmo aparelho de antes): volta pro lugar sem digitar nada
+    es.addEventListener("voce", (e) => { try { const d = JSON.parse(e.data); if (d.pid && d.pid !== pid) { souEu(d.pid); toast("Bem-vindo de volta, " + d.nome + "! Você voltou pro seu lugar"); conectar(); } } catch (x) {} });
     es.onerror = () => { status(false); const a = $("#app"); if (!S && a) a.innerHTML = `<div class="center muted" style="padding:40px">Procurando o jogo… confira se está no Wi-Fi do dono da sala.</div>`; };
   }
   setInterval(() => {
@@ -124,7 +133,7 @@
     const n = $("#nomeIn").value.trim(); if (!n) return toast("Digite seu nome");
     try { localStorage.setItem("jv_nome", n); } catch (e) {}
     const r = await send({ type: "join", name: n });
-    if (r.pid) { pid = r.pid; try { localStorage.setItem("jv_pid", pid); } catch (e) {} toast("Bem-vindo de volta! Você voltou pro seu lugar"); }
+    if (r.pid) { souEu(r.pid); toast("Bem-vindo de volta, " + (r.nome || n) + "! Você voltou pro seu lugar"); } else if (!r.erro) souEu(pid);
     if (!r.erro) { lastHTML = ""; conectar(); }
   };
 
@@ -133,7 +142,7 @@
     const lr = S.lastResult;
     return `<div class="top"><div class="logo">Jogos de <span>Viagem</span></div><button class="btn sm alt" data-fn="sair">Sair</button></div>
     <div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Na sala (${S.players.filter((p) => p.online).length})</b><small class="muted">👑 = dono da sala</small></div>
-      <div class="row">${S.players.map((p) => `<span class="pill ${p.online ? "" : "off"} ${p.id === pid ? "me" : ""}">${av(p.id, p.name, 24)} ${p.id === S.hostId ? "👑 " : ""}${esc(p.name)}</span>`).join("")}</div></div>
+      <div class="row">${S.players.map((p) => `<span class="pill ${p.online ? "" : "off"} ${p.id === pid ? "me" : ""}">${av(p.id, p.name, 24)} ${p.id === S.hostId ? "👑 " : ""}${esc(p.name)}${p.online ? "" : ` <small class="muted">caiu</small>${S.hostId === pid ? ` <b style="cursor:pointer;color:var(--red)" data-a='${A({ type: "remover", alvo: p.id, confirm: "Tirar " + p.name + " da sala? (se voltar, entra de novo normal)" })}'>✕</b>` : ""}`}</span>`).join("")}</div>${S.players.some((p) => !p.online) ? `<p class="muted" style="margin:8px 0 0;font-size:13px">Quem caiu volta sozinho pro mesmo lugar quando abrir o jogo de novo no mesmo celular.</p>` : ""}</div>
     ${convite()}
     ${testeConexao()}
     ${lr ? `<div class="card"><h3 style="margin-bottom:8px">${esc(lr.titulo)}</h3><div class="list">${(lr.linhas || []).map((l, i) => `<div class="li"><span>${i + 1}. ${esc(l.nome)}</span><b>${esc(l.pontos)}</b></div>`).join("")}</div></div>` : ""}

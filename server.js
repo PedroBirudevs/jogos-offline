@@ -104,16 +104,35 @@ function broadcast() {
   for (const [res, id] of anon) { const p = players.get(id); if (p) { anon.delete(res); p.conns.add(res); } send(res, id); }
 }
 
-function act(pid, a) {
+// ---------- reconhecer o celular que voltou ----------
+// Cada celular recebe um endereço (IP) do roteador e normalmente mantém o mesmo enquanto a rede está ligada.
+// Se chega uma conexão "desconhecida" (o navegador perdeu os dados, abriu por outro app, QR de novo…)
+// vinda do MESMO IP e do mesmo tipo de aparelho de alguém que já estava na sala, é a mesma pessoa.
+const ipDe = (req) => String((req.socket && req.socket.remoteAddress) || "").replace(/^::ffff:/, "");
+const familia = (req) => { const u = String(req.headers["user-agent"] || ""); return /iPhone|iPad/.test(u) ? "ios" : /Android/.test(u) ? "android" : "pc"; };
+function quemE(req) {
+  const ip = ipDe(req), fam = familia(req);
+  const cands = [...players.values()].filter((x) => x.ip === ip && (!x.fam || x.fam === fam));
+  if (!cands.length) return null;
+  // se tiver mais de um com o mesmo IP, fica com quem caiu (e o mais recente)
+  cands.sort((x, y) => (online(x) - online(y)) || (y.lastSeen - x.lastSeen));
+  return cands[0];
+}
+const marca = (p, req) => { if (p && req) { p.ip = ipDe(req); p.fam = familia(req); } };
+const normNome = (s) => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+function act(pid, a, req) {
   const p = players.get(pid);
   if (a.type === "join") {
     const name = String(a.name || "").trim().slice(0, 16);
     if (!name) return "Digite um nome";
     // voltou? quem entra com o mesmo nome reassume o lugar (pontos, time, vez) — funciona até se o celular perdeu os dados
-    const antigo = [...players.values()].find((x) => x.id !== pid && x.name.toLowerCase() === name.toLowerCase());
-    if (antigo) { antigo.lastSeen = now(); return { pid: antigo.id }; }
+    // (ignora acento, espaço e maiúscula: "Léo", "leo " e "LEO" são a mesma pessoa)
+    const antigo = [...players.values()].find((x) => x.id !== pid && normNome(x.name) === normNome(name));
+    if (antigo) { antigo.lastSeen = now(); marca(antigo, req); return { pid: antigo.id, nome: antigo.name }; }
     if (p) p.name = name;
     else { players.set(pid, { id: pid, name, conns: new Set(), lastSeen: now() }); order.push(pid); }
+    marca(players.get(pid), req);
     if (!hostId) hostId = pid;
     return;
   }
@@ -132,6 +151,13 @@ function act(pid, a) {
   }
   if (a.type === "lobby") { clearTimers(); game = null; return; }
   if (a.type === "host") { hostId = pid; return; }
+  // dono da sala tira da lista quem caiu e não vai voltar (só fora de jogo, pra não bagunçar times/pontos)
+  if (a.type === "remover") {
+    if (pid !== hostId) return "Só o dono da sala pode remover";
+    const q = players.get(a.alvo); if (!q || online(q)) return "Essa pessoa está conectada";
+    if (game && game.st && JSON.stringify(game.st.jog || []).includes(q.id)) return "Ela está no jogo — remove quando voltar pra sala";
+    players.delete(q.id); order = order.filter((x) => x !== q.id); return;
+  }
   if (!game) return "Nenhum jogo rolando";
   return GAMES[game.key].act(game.st, pid, a, ctx);
 }
@@ -146,8 +172,12 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" });
     req.socket.setNoDelay(true); req.socket.setKeepAlive(true, 3000);
     res.write("retry: 1500\n\n");
-    const p = players.get(pid);
-    if (p) { p.conns.add(res); p.lastSeen = now(); } else anon.set(res, pid);
+    let p = players.get(pid);
+    if (!p) { // celular desconhecido: é alguém que já estava na sala?
+      const q = quemE(req);
+      if (q) { res.write("event: voce\ndata: " + JSON.stringify({ pid: q.id, nome: q.name }) + "\n\n"); }
+    }
+    if (p) { p.conns.add(res); p.lastSeen = now(); marca(p, req); } else anon.set(res, pid);
     send(res, pid);
     if (p) broadcast();
     const ka = setInterval(() => { try { res.write("event: ping\ndata: " + now() + "\n\n"); } catch (e) {} }, 4000);
@@ -162,12 +192,12 @@ const server = http.createServer((req, res) => {
       try { a = JSON.parse(body || "{}"); } catch (e) {}
       const pid = String(a.pid || "");
       if (a.type === "oi") { // batimento: só marca que está vivo (o broadcast sai pelo vigia abaixo se alguém voltou/caiu)
-        const p = players.get(pid); if (p) { p.lastSeen = now(); if (a.net && typeof a.net === "object") p.net = { ping: +a.net.ping || 0, media: +a.net.media || 0, falhas: +a.net.falhas || 0, quedas: +a.net.quedas || 0, ua: String(a.net.ua || "").slice(0, 20) }; }
+        const p = players.get(pid); if (p) { p.lastSeen = now(); marca(p, req); if (a.net && typeof a.net === "object") p.net = { ping: +a.net.ping || 0, media: +a.net.media || 0, falhas: +a.net.falhas || 0, quedas: +a.net.quedas || 0, ua: String(a.net.ua || "").slice(0, 20) }; }
         res.writeHead(200, { "Content-Type": "application/json" });
         return res.end(JSON.stringify(p ? { ok: true } : { sumiu: true }));
       }
       let erro;
-      try { erro = act(pid, a); } catch (e) { console.error(e); erro = "Erro: " + e.message; }
+      try { erro = act(pid, a, req); } catch (e) { console.error(e); erro = "Erro: " + e.message; }
       // reconecta o canal do jogador recém-entrado
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(erro && typeof erro === "object" ? erro : erro ? { erro } : { ok: true }));

@@ -52,8 +52,9 @@ o Android/iPhone dos amigos passa a usar os **dados móveis** e para de enxergar
   desliga o "desligar roteador automaticamente" nas configurações do roteador e deixa o celular carregando.
 - No Termux use `termux-wake-lock` antes de `node server.js` (o alias `jogo` já faz isso) pra o Android não pausar o servidor com a tela apagada.
 
-O jogo agora se vira com quem cai: reconecta sozinho, mostra "reconectando…", e quem cair pode entrar de novo **com o mesmo nome**
-(ou tocar no nome na tela de entrada) que volta pro mesmo lugar, com pontos e respostas. Votações e vezes não ficam esperando quem caiu.
+O jogo agora se vira com quem cai: reconecta sozinho e mostra "reconectando…". Quem sair e abrir o jogo de novo **no mesmo celular**
+volta sozinho pro mesmo lugar (o dono da sala reconhece o aparelho pelo endereço dele na rede), com pontos e respostas, sem digitar nome.
+Se mesmo assim cair na tela de nome, é só usar o mesmo nome (acento/maiúscula não importam). O dono da sala pode tirar da lista (✕) quem caiu e não vai voltar. Votações e vezes não ficam esperando quem caiu.
 
 Com 7+ pessoas, um **mini roteador de viagem** (ex.: GL.iNet Mango ou TP-Link TL-WR902AC, ligado num power bank) aguenta melhor que o roteador do celular:
 liga o roteador, todo mundo (inclusive o dono da sala) conecta nele e o jogo roda no celular do dono do mesmo jeito.
