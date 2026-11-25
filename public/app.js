@@ -145,6 +145,7 @@
       <div class="row">${S.players.map((p) => `<span class="pill ${p.online ? "" : "off"} ${p.id === pid ? "me" : ""}">${av(p.id, p.name, 24)} ${p.id === S.hostId ? "👑 " : ""}${esc(p.name)}${p.online ? "" : ` <small class="muted">caiu</small>${S.hostId === pid ? ` <b style="cursor:pointer;color:var(--red)" data-a='${A({ type: "remover", alvo: p.id, confirm: "Tirar " + p.name + " da sala? (se voltar, entra de novo normal)" })}'>✕</b>` : ""}`}</span>`).join("")}</div>${S.players.some((p) => !p.online) ? `<p class="muted" style="margin:8px 0 0;font-size:13px">Quem caiu volta sozinho pro mesmo lugar quando abrir o jogo de novo no mesmo celular.</p>` : ""}</div>
     ${convite()}
     ${testeConexao()}
+    <p class="center muted" style="font-size:12px;margin:4px 0 0">versão ${esc(S.versao || "?")}</p>
     ${lr ? `<div class="card"><h3 style="margin-bottom:8px">${esc(lr.titulo)}</h3><div class="list">${(lr.linhas || []).map((l, i) => `<div class="li"><span>${i + 1}. ${esc(l.nome)}</span><b>${esc(l.pontos)}</b></div>`).join("")}</div></div>` : ""}
     <h3 style="margin:16px 4px 10px">Escolha o jogo</h3>
     <div class="games">${S.jogos.map((g) => `<button class="game" data-fn="abrir" data-k="${g.key}"><img class="capa" src="/capas/${g.key}.svg" alt=""><div class="gi"><b>${g.emoji} ${esc(g.nome)}</b><small>${esc(g.desc)}</small><small class="minj">${g.min > 1 ? `mín. ${g.min} jogadores` : "dá pra jogar com bots"}</small></div></button>`).join("")}</div>`;

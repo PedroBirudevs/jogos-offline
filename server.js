@@ -81,12 +81,22 @@ function ensureHost() {
   if (next) hostId = next.id;
 }
 
+// versão (commit do git) pra conferir se o celular atualizou
+const VERSAO = (() => {
+  try {
+    const g = path.join(__dirname, ".git"), head = fs.readFileSync(path.join(g, "HEAD"), "utf8").trim();
+    if (!head.startsWith("ref:")) return head.slice(0, 7);
+    const ref = head.slice(5).trim();
+    try { return fs.readFileSync(path.join(g, ref), "utf8").trim().slice(0, 7); }
+    catch (e) { const l = fs.readFileSync(path.join(g, "packed-refs"), "utf8").split("\n").find((x) => x.endsWith(" " + ref)); return l ? l.slice(0, 7) : "?"; }
+  } catch (e) { return "?"; }
+})();
 function stateFor(pid) {
   ensureHost();
   const g = game && GAMES[game.key];
   let view = null;
   if (g) { try { view = g.view(game.st, pid, ctx); } catch (e) { console.error(e); view = { erro: String(e.message) }; } }
-  return {
+  return { versao: VERSAO,
     now: now(),
     me: pid,
     hostId,
@@ -217,7 +227,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   const ends = enderecos();
-  console.log("\n  🎮  JOGOS DE VIAGEM rodando!\n");
+  console.log("\n  🎮  JOGOS DE VIAGEM rodando!   (versão " + VERSAO + ")\n");
   console.log("  Neste celular:   http://localhost:" + PORT);
   const bons = ends.filter((e) => e.tipo !== "dados");
   if (bons.length) bons.forEach((e) => console.log("  Para os amigos:  http://" + e.ip + ":" + PORT + (e.tipo === "roteador" ? "   <- roteador" : "")));
