@@ -124,8 +124,9 @@
     document.querySelectorAll("[data-in]").forEach((i) => (i.oninput = () => FN[i.dataset.in](i)));
     document.querySelectorAll("[data-hold]").forEach((el) => { const on = (e) => { e.preventDefault(); el.classList.add("show"); }, off = () => el.classList.remove("show"); el.onpointerdown = on; el.onpointerup = off; el.onpointerleave = off; el.onpointercancel = off; el.oncontextmenu = (e) => e.preventDefault(); });
     const h = HOOKS.splice(0); h.forEach((f) => f());
+    HOOKS_SEMPRE.forEach((f) => { try { f(); } catch (e) {} });
   }
-  const HOOKS = [];
+  const HOOKS = [], HOOKS_SEMPRE = [];
   const A = (o) => esc(JSON.stringify(o));
   const FN = {};
 
@@ -137,6 +138,9 @@
     <div style="margin-top:12px"><button class="btn full" data-fn="entrar">Entrar na sala</button></div></div>
     ${S && S.players.length ? `<div class="card"><div class="muted" style="margin-bottom:8px">${S.game ? "Caiu da sala? Toque no seu nome pra voltar pro seu lugar:" : "Já estão na sala (caiu? toque no seu nome):"}</div><div class="row">${S.players.map((p) => `<button class="pill ${p.online ? "" : "off"}" data-fn="souEu" data-n="${esc(p.name)}">${av(p.id, p.name, 22)} ${esc(p.name)}${p.online ? "" : " · caiu"}</button>`).join("")}</div></div>` : ""}`;
   }
+  FN.aba = (b) => { local.aba = b.dataset.v; lastHTML = ""; render(); };
+  FN.subSai = (b) => { local.subSai = +b.dataset.id; lastHTML = ""; render(); };
+  FN.verJogo = (b) => { local.verJogo = +b.dataset.i; lastHTML = ""; render(); };
   FN.outroLance = () => { const el = $("#outroValor"); const n = Math.floor(+((el && el.value) || 0)); if (!n) return toast("Digite o valor do lance"); send({ type: "lance", valor: n }).then((r) => { if (!r.erro && el) el.value = ""; }); };
   FN.souEu = (b) => { $("#nomeIn").value = b.dataset.n; FN.entrar(); };
   FN.entrar = async () => {
@@ -157,8 +161,22 @@
     ${testeConexao()}
     <p class="center muted" style="font-size:12px;margin:4px 0 0">versão ${esc(S.versao || "?")}</p>
     ${lr ? `<div class="card"><h3 style="margin-bottom:8px">${esc(lr.titulo)}</h3><div class="list">${(lr.linhas || []).map((l, i) => `<div class="li"><span>${i + 1}. ${esc(l.nome)}</span><b>${esc(l.pontos)}</b></div>`).join("")}</div></div>` : ""}
-    <h3 style="margin:16px 4px 10px">Escolha o jogo</h3>
-    <div class="games">${S.jogos.map((g) => `<button class="game" data-fn="abrir" data-k="${g.key}"><img class="capa" src="/capas/${g.key}.svg" alt=""><div class="gi"><b>${g.emoji} ${esc(g.nome)}</b><small>${esc(g.desc)}</small><small class="minj">${g.min > 1 ? `mín. ${g.min} jogadores` : "dá pra jogar com bots"}</small></div></button>`).join("")}</div>`;
+    ${abasJogos()}`;
+  }
+  // ---------- Leilão em destaque, numa aba só dele; os outros jogos na outra ----------
+  function abasJogos() {
+    const aba = local.aba || "leilao";
+    const L = S.jogos.find((g) => g.key === "leilao");
+    const outros = S.jogos.filter((g) => g.key !== "leilao");
+    const tabs = `<div class="abas"><button class="${aba === "leilao" ? "on" : ""}" data-fn="aba" data-v="leilao">⚽ Leilão OVER</button><button class="${aba === "outros" ? "on" : ""}" data-fn="aba" data-v="outros">🎲 Outros jogos</button></div>`;
+    if (aba === "leilao" && L) return tabs + `<div class="hero-leilao">
+        <div class="hl-top"><span class="hl-tag">MODO CARREIRA DE TÉCNICO</span><h2>Leilão <span>OVER</span></h2><p>R$ 100 no bolso. Jogadores reais, lance ao vivo, monte o time, escolha os reservas e jogue o campeonato ao vivo.</p></div>
+        <div class="hl-feat"><div>🔨<b>Leilão</b><small>dou-lhe uma, duas…</small></div><div>🧩<b>Formação</b><small>troque na hora</small></div><div>🪑<b>Reservas</b><small>3 no banco</small></div><div>🏟️<b>Ao vivo</b><small>gás, cartão, lesão</small></div></div>
+        <button class="btn huge full" data-fn="abrir" data-k="leilao">Criar leilão</button></div>`;
+    return tabs + `<div class="games">${outros.map(cartaoJogo).join("")}</div>`;
+  }
+  function cartaoJogo(g) {
+    return `<button class="game" data-fn="abrir" data-k="${g.key}"><img class="capa" src="/capas/${g.key}.svg" alt=""><div class="gi"><b>${g.emoji} ${esc(g.nome)}</b><small>${esc(g.desc)}</small><small class="minj">${g.min > 1 ? `mín. ${g.min} jogadores` : "dá pra jogar com bots"}</small></div></button>`;
   }
   // ---------- teste de conexão (fica na sala, atualiza a cada 4s) ----------
   function testeConexao() {
@@ -223,7 +241,7 @@
   const cardHTML = (j) => {
     const lab = j.grupo === "GOL" ? LAB.GOL : LAB.X, vals = [j.pac, j.sho, j.pas, j.dri, j.def, j.phy];
     return `<div class="fut ${tier(j.ovr)}">
-      <div class="fut-top"><div class="fut-l"><div class="fut-ovr">${nv(j.ovr)}</div><div class="fut-pos">${esc(j.pos)}</div><div class="fut-flag">${j.flag}</div></div>
+      <div class="fut-top"><div class="fut-l"><div class="fut-ovr">${nv(j.ovr)}</div><div class="fut-pos">${esc(j.pos)}</div>${(j.pos2 || []).length ? `<div class="fut-pos2">${esc(j.pos2.join(" "))}</div>` : ""}<div class="fut-flag">${j.flag}</div></div>
         <div class="fut-av">${j.foto ? `<img src="${j.foto}" alt="" onerror="this.remove()">` : ""}<span>${esc(ini(j.nome))}</span></div></div>
       <div class="fut-nome">${esc(j.nome)}</div>
       <div class="fut-clube">${esc(j.clube)}${j.liga ? " · " + esc(j.liga) : ""}</div>
@@ -231,10 +249,12 @@
       ${j.aprox && j.ovr != null ? `<div class="fut-aprox">overall aproximado</div>` : ""}</div>`;
   };
   const ORD = { GOL: 0, DEF: 1, MEI: 2, ATA: 3 };
+  const posTxt = (j) => [j.pos, ...(j.pos2 || [])].join("/"); // ex.: MC/LD/VOL (Valverde)
   const faltaTxt = (f) => Object.entries(f).filter(([, n]) => n > 0).map(([g, n]) => `${n} ${g}`).join(", ");
   const teamHTML = (t, n) => `<div class="team ${t.id === pid ? "mine" : ""}"><div class="row" style="justify-content:space-between"><b>${t.bot ? "🤖 " : ""}${esc(t.nome)}${t.id === pid ? " (você)" : ""}</b><span class="tag">💵 R$ ${t.dinheiro}</span></div>
     <div class="muted" style="font-size:12px;margin:2px 0 4px">${t.elenco.length}/${n}${t.r ? ` · ATQ ${t.r.ataque} · DEF ${t.r.defesa} · GERAL ${t.r.geral}` : " · notas escondidas"}${faltaTxt(t.falta) ? ` · falta: ${faltaTxt(t.falta)}` : ""}</div>
-    ${[...t.elenco].sort((a, b) => ORD[a.grupo] - ORD[b.grupo]).map((j) => `<div class="j"><span><span class="mini ${tier(j.ovr)}">${nv(j.ovr)}</span> ${j.foto ? `<img class="jf" src="${j.foto}" alt="" onerror="this.remove()">` : j.flag} ${esc(j.nome)} <small class="muted">${esc(j.pos)}${j.preco ? " · R$ " + j.preco : ""}</small></span></div>`).join("")}</div>`;
+    ${[...t.elenco].sort((a, b) => ORD[a.slot || a.grupo] - ORD[b.slot || b.grupo]).map((j) => `<div class="j"><span><span class="mini ${tier(j.ovr)}">${nv(j.ovr)}</span> ${j.foto ? `<img class="jf" src="${j.foto}" alt="" onerror="this.remove()">` : j.flag} ${esc(j.nome)} <small class="muted">${esc(posTxt(j))}${j.preco ? " · R$ " + j.preco : ""}</small></span></div>`).join("")}
+    ${t.banco && t.banco.length ? `<div class="muted" style="font-size:12px;margin:6px 0 2px">🪑 Reservas</div>${t.banco.map((j) => `<div class="j" style="opacity:.8"><span><span class="mini ${tier(j.ovr)}">${nv(j.ovr)}</span> ${j.foto ? `<img class="jf" src="${j.foto}" alt="" onerror="this.remove()">` : j.flag} ${esc(j.nome)} <small class="muted">${esc(posTxt(j))}${j.preco ? " · R$ " + j.preco : ""}</small></span></div>`).join("")}` : ""}</div>`;
   const agrupa = (l) => { const c = {}; l.forEach((x) => (c[x.nome] = (c[x.nome] || 0) + 1)); return Object.entries(c).map(([n, k]) => esc(n) + (k > 1 ? " " + k : "")).join(", "); };
   const jogoHTML = (g, nomeT) => `<div class="jogo"><span class="t">${esc(nomeT(g.a))}</span><span class="placar">${g.ga} x ${g.gb}</span><span class="t r">${esc(nomeT(g.b))}</span></div>
     ${g.golsA.length || g.golsB.length || g.pen ? `<div class="gols">${g.golsA.length ? "⚽ " + agrupa(g.golsA) : ""}${g.golsA.length && g.golsB.length ? " · " : ""}${g.golsB.length ? "⚽ " + agrupa(g.golsB) : ""}${g.pen ? `<br>Pênaltis: ${g.pen[0]} x ${g.pen[1]}` : ""}</div>` : ""}`;
@@ -252,7 +272,7 @@
   function campinho(t, grande) {
     const f = t.form || { GOL: 1, DEF: 2, MEI: 1, ATA: 1 };
     const linha = (g) => {
-      const js = t.elenco.filter((j) => j.grupo === g);
+      const js = t.elenco.filter((j) => (j.slot || j.grupo) === g);
       const vagas = Math.max(f[g] || 0, js.length);
       if (!vagas) return "";
       return `<div class="cl">${Array.from({ length: vagas }, (_, i) => {
@@ -262,6 +282,43 @@
       }).join("")}</div>`;
     };
     return `<div class="campo ${grande ? "g" : ""}">${["ATA", "MEI", "DEF", "GOL"].map(linha).join("")}</div>`;
+  }
+  // ---------- estádio animado: os dois times em campo, bola andando, gás de cada um ----------
+  const XS = { GOL: 6, DEF: 21, MEI: 34, ATA: 45 };
+  function estadio(g, nomeT) {
+    const lado = (L, s) => {
+      const ativos = L.campo.filter((x) => !x.fora);
+      const por = {}; ativos.forEach((x) => (por[x.slot] = por[x.slot] || []).push(x));
+      // o time empurra um pouco na direção da bola quando está com ela
+      const emp = (g.posse === s ? 1 : -1) * (s === "a" ? 1 : -1) * 3;
+      return Object.entries(por).flatMap(([sl, xs]) => xs.map((x, i) => {
+        const bx = XS[sl] + (sl === "GOL" ? 0 : emp), px = s === "a" ? bx : 100 - bx, py = ((i + 1) / (xs.length + 1)) * 100;
+        const cor = x.est > 50 ? "#3ddc84" : x.est > 20 ? "#ffcf3f" : "#ff5d6c";
+        return `<div class="tk ${s}" data-k="${g.a}${g.b}${x.id}" data-x="${px}" data-y="${py}" style="left:${px}%;top:${py}%"><i>${x.foto ? `<img src="${x.foto}" alt="">` : ""}<em>${esc(ini(x.nome))}</em>${x.am ? `<u class="am"></u>` : ""}</i><small>${esc(curto(x.nome))}</small><s><b style="width:${x.est}%;background:${cor}"></b></s></div>`;
+      })).join("");
+    };
+    return `<div class="estadio"><div class="gramado"><div class="meio"></div><div class="area e"></div><div class="area d"></div>
+      ${lado(g.A, "a")}${lado(g.B, "b")}
+      <div class="bola" data-k="bola${g.a}${g.b}" data-x="${g.bola.x}" data-y="${g.bola.y}" style="left:${g.bola.x}%;top:${g.bola.y}%"></div></div>
+      <div class="row muted" style="justify-content:space-between;font-size:12px;margin-top:4px"><span>⬅ ${esc(nomeT(g.a))} (${g.A.trocas}/${g.A.banco.length} trocas)</span><span>${esc(nomeT(g.b))} (${g.B.trocas}/${g.B.banco.length}) ➡</span></div></div>`;
+  }
+  // animação: cada elemento com data-k sai da posição anterior e desliza até a nova
+  const POS = {};
+  HOOKS_SEMPRE.push(() => {
+    document.querySelectorAll(".estadio [data-k]").forEach((el) => {
+      const k = el.dataset.k, x = +el.dataset.x, y = +el.dataset.y, p = POS[k];
+      if (p && (p.x !== x || p.y !== y)) { el.style.transition = "none"; el.style.left = p.x + "%"; el.style.top = p.y + "%"; el.offsetWidth; el.style.transition = ""; el.style.left = x + "%"; el.style.top = y + "%"; }
+      POS[k] = { x, y };
+    });
+  });
+  function subsHTML(g) {
+    const L = g.a === pid ? g.A : g.B;
+    const livres = L.banco.filter((b) => !b.usado);
+    if (!livres.length) return `<div class="card muted center" style="padding:8px">Sem trocas sobrando</div>`;
+    const sai = local.subSai && L.campo.find((x) => x.id === local.subSai && !x.fora);
+    return `<div class="card"><b>🔁 Substituição</b> <small class="muted">(${livres.length} no banco)</small>
+      <div class="chips" style="margin-top:6px">${L.campo.filter((x) => !x.fora).map((x) => `<button class="chip ${sai && sai.id === x.id ? "on" : ""}" data-fn="subSai" data-id="${x.id}">${esc(curto(x.nome))} <small>${x.est}%</small></button>`).join("")}</div>
+      ${sai ? `<div class="muted" style="font-size:13px;margin:6px 0 2px">Quem entra no lugar de ${esc(curto(sai.nome))}?</div><div class="chips">${livres.map((b) => `<button class="chip" data-a='${A({ type: "sub", sai: sai.id, entra: b.id })}'>${esc(curto(b.nome))} <small>${b.ovr} ${esc(b.pos)}${b.grupos.includes(sai.slot) ? " ✓" : ""}</small></button>`).join("")}</div>` : `<div class="muted" style="font-size:12px;margin-top:4px">Toque em quem sai.</div>`}</div>`;
   }
   const TAG = { lidera: "🔨 lidera", passou: "passou", completo: "✅ completo", ausente: "📵 ausente" };
   R.leilao = (v) => `<div class="tema100">${leilaoCorpo(v)}</div>`;
@@ -306,19 +363,53 @@
         ${v.log.length ? `<div class="card"><div class="list">${v.log.map((l) => `<div class="muted" style="font-size:14px">• ${esc(l)}</div>`).join("")}</div></div>` : ""}
         <div class="campos">${outros.map((t) => `<div class="mini-time ${t.tag === "lidera" ? "lid" : ""}"><div class="row" style="justify-content:space-between;gap:4px"><b>${t.bot ? "🤖 " : ""}${esc(t.nome)}</b><small>R$ ${t.dinheiro}</small></div>${t.tag ? `<span class="tg ${t.tag}">${TAG[t.tag]}</span>` : `<span class="tg vz"> </span>`}${campinho(t, false)}</div>`).join("")}</div>`;
     }
+    if (v.fase === "reservas") {
+      const Rr = v.res, NOMES = { DEF: "🛡️ Defensor", MEI: "🎯 Meio-campo", ATA: "⚡ Atacante" };
+      local.resLance = local.resLance || {};
+      const todos = Rr.preciso.every((g) => Rr.minhas[g]);
+      const blocos = ["DEF", "MEI", "ATA"].map((g) => {
+        const ja = meu && (meu.banco || []).find((j) => (j.slot || j.grupo) === g);
+        if (!meu) return "";
+        if (ja) return `<div class="card"><b>${NOMES[g]}</b><div class="muted" style="margin-top:4px">✅ Seu reserva: <b style="color:var(--txt)">${esc(ja.nome)}</b> (${ja.ovr})</div></div>`;
+        const esc1 = Rr.minhas[g], lance = esc1 ? esc1.lance : local.resLance[g] || 0;
+        return `<div class="card"><div class="row" style="justify-content:space-between"><b>${NOMES[g]}</b><span class="muted" style="font-size:13px">seu lance: <b style="color:var(--txt)">R$ ${lance}</b></span></div>
+          <div class="resl">${Rr.cands[g].map((c) => `<button class="resc ${esc1 && esc1.id === c.id ? "on" : ""}" data-a='${A({ type: "reserva", g, id: c.id, lance })}'><i class="${tier(c.ovr)}">${c.foto ? `<img src="${c.foto}" alt="" onerror="this.remove()">` : ""}<em>${esc(ini(c.nome))}</em></i><b>${c.ovr}</b><span>${esc(curto(c.nome))}</span><small>${esc(posTxt(c))}</small></button>`).join("") || `<p class="muted">Acabou a lista — você ganha um no fim.</p>`}</div>
+          ${esc1 ? `<div class="row" style="gap:6px;margin-top:8px"><span class="muted" style="font-size:13px">Lance (se outro quiser o mesmo):</span>${[0, 1, 5, 10].map((x) => `<button class="chip ${lance === x ? "on" : ""}" data-a='${A({ type: "reserva", g, id: esc1.id, lance: x })}' ${x > meu.dinheiro ? "disabled" : ""}>R$ ${x}</button>`).join("")}</div>` : ""}</div>`;
+      }).join("");
+      return `<div class="card center"><h2>🪑 Escolha seus reservas</h2><p class="muted" style="margin:6px 0">1 de cada: defensor, meio e atacante (82–86). Toque no que quer. Se mais de um escolher o mesmo, leva quem deu o maior lance com o dinheiro que sobrou — quem perder escolhe de novo.</p>
+          <div class="row" style="justify-content:center;gap:12px"><span class="tag">💵 R$ ${meu ? meu.dinheiro : 0}</span><span>Rodada ${Rr.rodada} · ⏱ <b class="timer" data-fim="${Rr.fim}">${seg(Rr.fim)}s</b></span></div></div>
+        ${blocos}
+        ${meu && Rr.preciso.length ? `<button class="btn full ${Rr.pronto ? "alt" : "green"}" data-a='${A({ type: "reservaPronto" })}' ${todos && !Rr.pronto ? "" : "disabled"}>${Rr.pronto ? "Esperando os outros…" : todos ? "✅ Confirmar escolhas" : "Escolha 1 de cada que falta"}</button>` : ""}
+        ${Rr.esperando.length ? `<p class="center muted">Esperando: ${Rr.esperando.map(esc).join(", ")}</p>` : ""}
+        ${Rr.log.length ? `<div class="card"><div class="list">${Rr.log.map((l) => `<div class="muted" style="font-size:14px">• ${esc(l)}</div>`).join("")}</div></div>` : ""}`;
+    }
     if (v.fase === "times") {
-      return `<div class="card center"><h2>Elencos fechados! ⚽</h2><p class="muted">Formato: <b style="color:var(--txt)">${esc(v.formato)}</b>. As partidas são ao vivo: dá pra mudar a tática durante o jogo.</p>
+      return `<div class="card center"><h2>Elencos fechados! ⚽</h2><p class="muted">Formato: <b style="color:var(--txt)">${esc(v.formato)}</b>. Partidas ao vivo: tática muda na hora, jogador cansa (troca obrigatória abaixo de 20% de gás), pode machucar ou ser expulso (só naquele jogo).</p>
         <button class="btn full" data-a='${A({ type: "comecar" })}'>Começar campeonato</button></div>${taticaHTML(v, "Tática inicial")}` + timesHTML;
     }
     if (v.fase === "aovivo") {
       const meuJ = v.jogos.find((g) => g.a === pid || g.b === pid);
-      const minTxt = v.min > 90 ? `${v.min}' PRORROGAÇÃO · gol de ouro` : v.min > 0 ? `${Math.min(v.min, 90)}'` : "Vai começar…";
-      const placar = (g, big) => `<div class="${big ? "live" : "jogo"}"><span class="t">${esc(nomeT(g.a))}</span><span class="placar">${g.ga} x ${g.gb}${g.pen ? `<small> (${g.pen[0]}x${g.pen[1]} pên.)</small>` : ""}</span><span class="t r">${esc(nomeT(g.b))}</span></div>`;
-      let h = `<div class="card center" style="padding:10px"><b>${esc(v.titulo)}</b> · <span class="ao-vivo">● AO VIVO</span> <b>${minTxt}</b></div>`;
-      if (meuJ) h += `<div class="card">${placar(meuJ, true)}${meuJ.fim ? `<div class="center muted">Fim de jogo</div>` : ""}<div class="ev">${meuJ.ev.map((e) => `<div class="${e.gol ? "gol" : ""}"><b>${e.m}'</b> ${esc(e.t)}</div>`).join("") || `<div class="muted">Bola rolando…</div>`}</div></div>${taticaHTML(v, "Mude a tática agora")}`;
-      const outros = v.jogos.filter((g) => g !== meuJ);
-      if (outros.length) h += `<div class="card"><b>Outros jogos</b><div style="margin-top:8px">${outros.map((g) => placar(g, false)).join("")}</div></div>`;
-      if (!meuJ) h += `<div class="card"><div class="ev">${v.jogos.flatMap((g) => g.ev.slice(0, 3)).map((e) => `<div class="${e.gol ? "gol" : ""}"><b>${e.m}'</b> ${esc(e.t)}</div>`).join("")}</div></div>`;
+      const verJ = meuJ || v.jogos[local.verJogo || 0] || v.jogos[0];
+      const minTxt = v.min > 90 ? `${v.min}' · gol de ouro` : v.min > 0 ? `${Math.min(v.min, 90)}'` : "Vai começar…";
+      let h = `<div class="placarao"><div class="pt"><b>${esc(nomeT(verJ.a))}</b></div><div class="pc"><div class="ns">${verJ.ga}<span>x</span>${verJ.gb}</div><div class="mn"><span class="ao-vivo">●</span> ${v.intervalo ? "INTERVALO" : verJ.fim ? "FIM" : minTxt}</div></div><div class="pt r"><b>${esc(nomeT(verJ.b))}</b></div></div>`;
+      // gol: tela de comemoração com a foto (2,5s)
+      const ug = verJ.ev.find((e) => e.gol);
+      if (ug) { const k = ug.m + ug.t; if (local.golK !== k) { local.golK = k; local.golAt = Date.now(); setTimeout(() => { lastHTML = ""; render(); }, 2700); } }
+      if (ug && Date.now() - (local.golAt || 0) < 2600) h += `<div class="golao"><div class="gf">${ug.foto ? `<img src="${ug.foto}" alt="">` : `<em>${esc(ini(ug.autor || "?"))}</em>`}</div><div class="gt">GOOOL!</div><div class="gn">${esc(ug.autor || "")}</div><div class="muted">${esc(ug.time || "")} · ${esc(ug.placar || "")}</div></div>`;
+      // pausa pra troca obrigatória
+      if (v.pausa) {
+        const P = v.pausa;
+        if (P.tid === pid) h += `<div class="card pausa"><b>⏸ Troca obrigatória!</b><p style="margin:6px 0">${esc(P.sai.nome)} ${P.motivo === "machucado" ? "se machucou 🚑" : `está sem gás (${P.sai.est}%) 🥵`}. Quem entra? <span class="muted">(<b class="timer" data-fim="${P.fim}">${seg(P.fim)}s</b>, senão o técnico escolhe)</span></p>
+          <div class="resl">${P.opcoes.map((o) => `<button class="resc" data-a='${A({ type: "sub", sai: P.sai.id, entra: o.id })}'><i class="${tier(o.ovr)}">${o.foto ? `<img src="${o.foto}" alt="">` : ""}<em>${esc(ini(o.nome))}</em></i><b>${o.ovr}</b><span>${esc(curto(o.nome))}</span><small>${esc(o.pos)}${o.grupos.includes(P.sai.slot) ? " ✓" : ""}</small></button>`).join("")}</div></div>`;
+        else h += `<div class="card center muted">⏸ ${esc(P.nome)} está fazendo uma substituição… (<b class="timer" data-fim="${P.fim}">${seg(P.fim)}s</b>)</div>`;
+      }
+      if (v.intervalo) h += `<div class="card center"><b>⏸ Intervalo</b> — 2º tempo em <b class="timer" data-fim="${v.intervalo}">${seg(v.intervalo)}s</b><p class="muted" style="margin:4px 0">Dá pra trocar jogador e mudar a tática agora.</p>${meuJ ? `<button class="btn ${v.prontoIntervalo ? "alt" : ""} full" data-a='${A({ type: "segundoTempo" })}' ${v.prontoIntervalo ? "disabled" : ""}>${v.prontoIntervalo ? "Esperando os outros…" : "Pronto pro 2º tempo"}</button>` : ""}</div>`;
+      h += estadio(verJ, nomeT);
+      if (meuJ && !meuJ.fim) h += subsHTML(meuJ);
+      h += `<div class="card relato"><b>🎙️ Relato</b><div class="ev">${verJ.ev.slice(0, 14).map((e) => `<div class="${e.tipo || ""}"><b>${e.m}'</b> ${esc(e.t)}</div>`).join("")}</div></div>`;
+      if (meuJ && !meuJ.fim) h += taticaHTML(v, "Mude a tática agora");
+      const outros = v.jogos.filter((g) => g !== verJ);
+      if (outros.length) h += `<div class="card"><b>Outros jogos</b><div style="margin-top:8px">${outros.map((g) => `<div class="jogo" ${meuJ ? "" : `data-fn="verJogo" data-i="${v.jogos.indexOf(g)}"`}><span class="t">${esc(nomeT(g.a))}</span><span class="placar">${g.ga} x ${g.gb}${g.pen ? `<small> (${g.pen[0]}x${g.pen[1]})</small>` : ""}</span><span class="t r">${esc(nomeT(g.b))}</span></div>${g.ev[0] && g.ev[0].tipo !== "falta" ? `<div class="gols">${g.ev[0].m}' ${esc(g.ev[0].t)}</div>` : ""}`).join("")}</div></div>`;
       return h + tabelaHTML(v);
     }
     if (v.fase === "intervalo") {

@@ -98,6 +98,9 @@ async function foto(j) {
 }
 
 (async () => {
+  // sem internet? sai quietinho (o servidor chama isso sozinho toda vez que liga)
+  try { await get("https://www.wikidata.org/w/api.php?action=query&format=json"); }
+  catch (e) { console.log("Sem internet agora — as fotos baixam da próxima vez que tiver."); return; }
   const falta = jog.filter((j) => { const f = slug(j.nome + "-" + j.clube); return !fs.existsSync(path.join(DIR, f + ".jpg")) && !sem.has(f); });
   console.log(`${jog.length} jogadores, ${jog.length - falta.length} já ok/pulados, baixando ${falta.length}...`);
   let ok = 0, nao = 0, i = 0;

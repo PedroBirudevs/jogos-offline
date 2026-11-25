@@ -48,6 +48,8 @@ EST = {"Rossi":"AR","Arrascaeta":"UY","Guillermo Varela":"UY","De la Cruz":"UY",
  "Rollheiser":"AR","Barreal":"AR","Lautaro Díaz":"AR","Félix Torres":"EC","Angileri":"AR","José Martínez":"VE","Rodrigo Garro":"AR","Carrillo":"PE","Memphis Depay":"NL",
  "Puma Rodríguez":"UY","Nuno Moreira":"PT","Andrés Gómez":"CO","Pablo Vegetti":"AR","Raúl Cáceres":"PY","Rochet":"UY","Bernabei":"AR","Aguirre":"AR","Carbonero":"CO",
  "Borré":"CO","Enner Valencia":"EC","Zapelli":"AR","Kevin Viveros":"CO","Sebastián Gómez":"CO","Diego Hernández":"UY","Guzmán":"AR"}
+# posições extras dos brasileiros sem dado da EA: só o óbvio (volante faz meia, ponta faz meia/atacante…)
+ALT_BR = {"VOL": ["MC"], "MC": ["VOL", "MEI"], "MEI": ["MC", "SA"], "PE": ["ME", "ATA"], "PD": ["MD", "ATA"], "LE": ["ALE"], "LD": ["ALD"]}
 flag = lambda cc: "".join(chr(0x1F1E6 + ord(c) - 65) for c in cc) if cc and len(cc) == 2 and cc != "XK" else "🏳️"
 
 def stats_fake(pos, ovr, rnd):
@@ -77,13 +79,14 @@ def main(csv_path):
         st = [int(float(x[c] or 0)) for c in ("pace", "shooting", "passing", "dribbling", "defending", "physic")]
         ovr = int(x["overall"]); aj = AJUSTE_EA.get((nome, x["club_name"]))
         if aj: st = [min(97, s + (aj - ovr)) for s in st]; ovr = aj
-        out.append([nome, PT[p], GRUPO[p], ovr, *st, x["club_name"], liga or "Top 100", flag(NAC.get(x["nationality_name"], "")), 1 if k in top100 or liga == "Brasileirão" else 0, 0, int(x["player_id"])])
+        outras = [PT[q.strip()] for q in x["positions"].split(",")[1:] if q.strip() in PT]
+        out.append([nome, PT[p], GRUPO[p], ovr, *st, x["club_name"], liga or "Top 100", flag(NAC.get(x["nationality_name"], "")), 1 if k in top100 or liga == "Brasileirão" else 0, 0, int(x["player_id"]), ",".join(outras)])
     rnd = random.Random(27)
     for club, lst in CLUBES.items():
         if club not in GRANDES_BR: continue
         for nome, p, ovr in lst:
             g = GRUPO[p]
-            out.append([nome, PT[p], g, ovr, *stats_fake(g, ovr, rnd), club, "Brasileirão", flag(EST.get(nome, "BR")), 1, 1, 0])
+            out.append([nome, PT[p], g, ovr, *stats_fake(g, ovr, rnd), club, "Brasileirão", flag(EST.get(nome, "BR")), 1, 1, 0, ",".join(ALT_BR.get(PT[p], []))])
     # corta quem não costuma jogar
     porclube = collections.defaultdict(list)
     for r in out: porclube[(r[10], r[2])].append(r)
@@ -91,7 +94,7 @@ def main(csv_path):
     for (clube, g), lst in porclube.items():
         lst.sort(key=lambda r: -r[3]); out += lst[:POR_CLUBE[g]]
     out.sort(key=lambda r: -r[3])
-    cols = ["nome", "pos", "grupo", "ovr", "pac", "sho", "pas", "dri", "def", "phy", "clube", "liga", "flag", "top", "aprox", "ea"]
+    cols = ["nome", "pos", "grupo", "ovr", "pac", "sho", "pas", "dri", "def", "phy", "clube", "liga", "flag", "top", "aprox", "ea", "pos2"]
     os.makedirs(os.path.join(os.path.dirname(__file__), "..", "data"), exist_ok=True)
     dst = os.path.join(os.path.dirname(__file__), "..", "data", "jogadores.json")
     json.dump({"cols": cols, "fonte": "EA SPORTS FC 27 (ratings públicos) + Brasileirão aproximado", "rows": out}, open(dst, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))

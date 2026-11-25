@@ -225,6 +225,19 @@ const server = http.createServer((req, res) => {
   });
 });
 
+// fotos dos jogadores: toda vez que o jogo liga COM internet, baixa em segundo plano as que faltam
+// (sem internet não faz nada; o jogo funciona normal com as iniciais)
+function baixarFotosSozinho() {
+  if (process.env.SEM_FOTOS) return;
+  try {
+    const { spawn } = require("child_process");
+    const c = spawn(process.execPath, [path.join(__dirname, "tools", "baixar-fotos.js")], { stdio: ["ignore", "pipe", "ignore"] });
+    let ult = "";
+    c.stdout.on("data", (d) => { ult = String(d).trim().split("\n").pop(); });
+    c.on("exit", () => { if (ult && !/Sem internet/.test(ult)) console.log("  📸 Fotos: " + ult); });
+  } catch (e) {}
+}
+setTimeout(baixarFotosSozinho, 3000);
 server.listen(PORT, "0.0.0.0", () => {
   const ends = enderecos();
   console.log("\n  🎮  JOGOS DE VIAGEM rodando!   (versão " + VERSAO + ")\n");

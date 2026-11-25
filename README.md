@@ -36,6 +36,14 @@ cd ~/jogos-offline && git pull
 - Os clubes brasileiros fora do FC 27 têm elencos e overalls **aproximados**, ajustados pela fase de 2026 (aparece "overall aproximado" na carta).
   Pra corrigir, edite `tools/brasileirao_manual.py` e rode `python3 tools/build_players.py caminho/players-db.csv`.
 
+## Leilão OVER (resumo)
+- Leilão com martelo ("dou-lhe uma… duas… três"), +1/+5/+10/Tudo/outro valor, formação escolhida durante o leilão.
+- Jogador pode fazer mais de uma posição (dados do EA FC: Valverde MC/LD/VOL, Vini PE/ATA): entra em qualquer vaga que ele faz.
+- Depois do leilão: 3 reservas por time (1 DEF, 1 MEI, 1 ATA, 82–86), escolhidos com lance do dinheiro que sobrou.
+- Partida ao vivo animada: campo com os dois times e as fotos, bola andando, relato, gol com foto, gás de cada jogador,
+  troca obrigatória abaixo de 20% (ou lesão) se tiver reserva, intervalo pra trocar/mudar tática, faltas, amarelo/vermelho
+  (expulsão e lesão valem só pro jogo).
+
 ## Fotos dos jogadores
 As fotos vêm da Wikipédia e ficam salvas no celular (funciona offline depois). Com internet, rode uma vez:
 ```
