@@ -1,0 +1,10 @@
+{
+  "name": "Leilão OVER — Solo",
+  "short_name": "Leilão OVER",
+  "start_url": "/solo/",
+  "scope": "/solo/",
+  "display": "standalone",
+  "background_color": "#0b1a12",
+  "theme_color": "#0b1a12",
+  "icons": [{ "src": "/solo/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

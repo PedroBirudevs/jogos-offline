@@ -44,6 +44,13 @@ cd ~/jogos-offline && git pull
   troca obrigatória abaixo de 20% (ou lesão) se tiver reserva, intervalo pra trocar/mudar tática, faltas, amarelo/vermelho
   (expulsão e lesão valem só pro jogo).
 
+## Modo solo (Leilão contra bots, sem rede)
+- No celular que roda o jogo, abra **http://localhost:3100/solo/** (ou o botão "🎮 Jogar sozinho contra bots" na aba do Leilão).
+- No Chrome: ⋮ → **Adicionar à tela inicial**. Depois disso abre pelo ícone **mesmo com o Termux desligado e sem internet**
+  (o jogo fica guardado no celular; as fotos que já foram baixadas também).
+- É o mesmo código do Leilão com os amigos (`tools/build_solo.js` gera `public/solo/` toda vez que o servidor liga).
+- Se sair no meio, a partida não fica salva.
+
 ## Fotos dos jogadores
 As fotos vêm da Wikipédia e ficam salvas no celular (funciona offline depois). Com internet, rode uma vez:
 ```

@@ -1,10 +1,13 @@
 (() => {
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // MODO SOLO (/solo/): o "dono da sala" roda dentro deste próprio celular (engine.js), sem rede nenhuma
+  const SOLO = window.SOLO || null;
   let pid = null;
   try { pid = localStorage.getItem("jv_pid"); } catch (e) {}
   // o endereço da página guarda quem você é (?eu=...): se o navegador apagar os dados, o link ainda lembra
   try { const q = new URLSearchParams(location.search).get("eu"); if (q && !pid) pid = q; } catch (e) {}
+  if (SOLO) pid = "eu";
   if (!pid) { pid = Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem("jv_pid", pid); } catch (e) {} }
 
   let S = null, off = 0, es = null;
@@ -20,6 +23,7 @@
     try { const u = new URL(location.href); u.searchParams.set("eu", pid); history.replaceState(null, "", u); } catch (e) {}
   }
   function conectar() {
+    if (SOLO) { SOLO.start((st) => { S = st; off = 0; ultimo = Date.now(); render(); }); return; }
     if (es) { try { es.close(); } catch (e) {} }
     ultimo = Date.now();
     es = new EventSource("/events?pid=" + encodeURIComponent(pid));
@@ -31,6 +35,7 @@
     es.onerror = () => { status(false); const a = $("#app"); if (!S && a) a.innerHTML = `<div class="center muted" style="padding:40px">Procurando o jogo… confira se está no Wi-Fi do dono da sala.</div>`; };
   }
   setInterval(() => {
+    if (SOLO) return;
     const parado = Date.now() - ultimo;
     if (parado > 6000) status(false);
     if (parado > 10000 || (es && es.readyState === 2)) { tentativas++; conectar(); }
@@ -39,7 +44,7 @@
   const NET = { ping: 0, hist: [], falhas: 0, quedas: 0 };
   const tipo = /iPhone|iPad/.test(navigator.userAgent) ? "iPhone" : /Android/.test(navigator.userAgent) ? "Android" : "PC";
   setInterval(async () => {
-    if (!S || !me()) return;
+    if (SOLO || !S || !me()) return;
     const t0 = performance.now();
     try {
       const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 3500);
@@ -50,7 +55,7 @@
       const j = await r.json(); if (j.sumiu) { lastHTML = ""; S.players = S.players.filter((p) => p.id !== pid); render(); }
     } catch (e) { NET.falhas++; }
   }, 4000);
-  const reabrir = () => { if (Date.now() - ultimo > 3000) conectar(); };
+  const reabrir = () => { if (!SOLO && Date.now() - ultimo > 3000) conectar(); };
   document.addEventListener("visibilitychange", () => { if (!document.hidden) reabrir(); });
   window.addEventListener("online", reabrir);
   window.addEventListener("focus", reabrir);
@@ -69,6 +74,7 @@
     }
   }
   async function send(a) {
+    if (SOLO) { const j = SOLO.act({ ...a, pid }); if (j.erro) toast(j.erro); return j; }
     try {
       const r = await fetch("/api/act", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...a, pid }) });
       const j = await r.json();
@@ -152,7 +158,21 @@
   };
 
   // ---------- Sala ----------
+  // ---------- sala do modo solo: só o Leilão, você + bots ----------
+  function telaSolo() {
+    const eu = me();
+    return `<div class="top"><div class="logo">⚽ Leilão <span>OVER</span></div><span class="tag">🎮 SOLO</span></div>
+      <div class="hero-leilao">
+        <div class="hl-top"><span class="hl-tag">MODO SOLO · SEM INTERNET</span><h2>Leilão <span>OVER</span></h2><p>Você contra os bots. Tudo roda aqui no seu celular: dá pra jogar no ônibus, no avião, onde for.</p></div>
+        <label class="l" style="position:relative">Seu nome de técnico</label>
+        <div class="row" style="gap:6px;position:relative;margin-bottom:12px"><input id="soloNome" maxlength="16" value="${esc(eu ? eu.name : "")}" style="flex:1"><button class="btn sm alt" data-fn="soloNome">Salvar</button></div>
+        <button class="btn huge full" data-fn="abrir" data-k="leilao">Criar leilão contra bots</button></div>
+      ${S.lastResult ? `<div class="card"><b>Último resultado</b><div class="muted" style="margin-top:4px">${esc(S.lastResult.titulo || "")}</div></div>` : ""}
+      <div class="card"><b>📲 Deixar no celular</b><p class="muted" style="margin:6px 0 0;font-size:14px">No Chrome, toque nos ⋮ e em <b style="color:var(--txt)">"Adicionar à tela inicial"</b>. Depois abre pelo ícone, mesmo com o Termux desligado e sem internet.<br>Obs.: se você sair do jogo no meio, a partida não fica salva.</p></div>`;
+  }
+  FN.soloNome = () => { const n = ($("#soloNome").value || "").trim(); if (n) { send({ type: "nome", name: n }); toast("Nome salvo"); } };
   function telaSala() {
+    if (S.solo) return telaSolo();
     const lr = S.lastResult;
     return `<div class="top"><div class="logo">Jogos de <span>Viagem</span></div><button class="btn sm alt" data-fn="sair">Sair</button></div>
     <div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b>Na sala (${S.players.filter((p) => p.online).length})</b><small class="muted">👑 = dono da sala</small></div>
@@ -172,7 +192,8 @@
     if (aba === "leilao" && L) return tabs + `<div class="hero-leilao">
         <div class="hl-top"><span class="hl-tag">MODO CARREIRA DE TÉCNICO</span><h2>Leilão <span>OVER</span></h2><p>R$ 100 no bolso. Jogadores reais, lance ao vivo, monte o time, escolha os reservas e jogue o campeonato ao vivo.</p></div>
         <div class="hl-feat"><div>🔨<b>Leilão</b><small>dou-lhe uma, duas…</small></div><div>🧩<b>Formação</b><small>troque na hora</small></div><div>🪑<b>Reservas</b><small>3 no banco</small></div><div>🏟️<b>Ao vivo</b><small>gás, cartão, lesão</small></div></div>
-        <button class="btn huge full" data-fn="abrir" data-k="leilao">Criar leilão</button></div>`;
+        <button class="btn huge full" data-fn="abrir" data-k="leilao">Criar leilão</button>
+        <a class="btn alt full" style="margin-top:8px;position:relative;display:block;text-align:center;text-decoration:none" href="/solo/">🎮 Jogar sozinho contra bots</a></div>`;
     return tabs + `<div class="games">${outros.map(cartaoJogo).join("")}</div>`;
   }
   function cartaoJogo(g) {
@@ -211,7 +232,7 @@
     m.innerHTML = `<div class="sheet"><img class="capa-modal" src="/capas/${g.key}.svg" alt=""><div class="row" style="justify-content:space-between"><h2>${g.emoji} ${esc(g.nome)}</h2><button class="btn sm alt" id="mx">✕</button></div>
       <p class="muted">${esc(g.desc)}</p>
       ${g.opcoes.map((o) => `<label class="l">${esc(o.nome)}</label><select id="op_${o.id}">${o.valores.map((v) => `<option ${v == o.padrao ? "selected" : ""}>${v}</option>`).join("")}</select>`).join("")}
-      <div style="margin-top:16px"><button class="btn full" id="mgo">Começar pra todo mundo</button></div></div>`;
+      <div style="margin-top:16px"><button class="btn full" id="mgo">${S.solo ? "Começar" : "Começar pra todo mundo"}</button></div></div>`;
     m.classList.remove("hide");
     $("#mx").onclick = () => m.classList.add("hide");
     m.onclick = (e) => { if (e.target === m) m.classList.add("hide"); };
@@ -226,7 +247,7 @@
   function telaJogo() {
     const g = S.game, v = g.view || {};
     const corpo = (R[g.key] || (() => "<div class='card'>?</div>"))(v);
-    return `<div class="tema-${g.key}"><div class="top topjogo" style="background-image:linear-gradient(90deg,rgba(16,16,20,.92),rgba(16,16,20,.55)),url(/capas/${g.key}.svg)"><div class="logo">${g.emoji} ${esc(g.nome)}</div><button class="btn sm alt" data-a='${A({ type: "lobby", confirm: "Encerrar o jogo pra todo mundo e voltar pra sala?" })}'>Sair</button></div>${corpo}</div>`;
+    return `<div class="tema-${g.key}"><div class="top topjogo" style="background-image:linear-gradient(90deg,rgba(16,16,20,.92),rgba(16,16,20,.55)),url(/capas/${g.key}.svg)"><div class="logo">${g.emoji} ${esc(g.nome)}</div><button class="btn sm alt" data-a='${A({ type: "lobby", confirm: S.solo ? "Sair do leilão? A partida não fica salva." : "Encerrar o jogo pra todo mundo e voltar pra sala?" })}'>Sair</button></div>${corpo}</div>`;
   }
   const placarHTML = (pl, titulo) => `<div class="card"><b>${titulo || "Placar"}</b><div class="list" style="margin-top:8px">${pl.map((x, i) => `<div class="li ${x.id === pid ? "hl" : ""}"><span>${(x.pts > 0 && ["🥇", "🥈", "🥉"][i]) || i + 1 + "."} ${av(x.id, x.nome, 26)} ${esc(x.nome)}</span><b>${x.pts}</b></div>`).join("")}</div></div>`;
   const voltar = `<button class="btn full" data-a='${A({ type: "lobby" })}'>Voltar pra sala</button>`;

@@ -173,7 +173,7 @@ function act(pid, a, req) {
 }
 
 // ---------------- HTTP ----------------
-const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".json": "application/json", ".webmanifest": "application/manifest+json" };
+const MIME = { ".webmanifest": "application/manifest+json", ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".json": "application/json", ".webmanifest": "application/manifest+json" };
 
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
@@ -215,7 +215,15 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  // lista das fotos que já estão no celular (o modo solo usa pra mostrar as fotos sem servidor)
+  if (u.pathname === "/fotos/_lista.json") {
+    let l = []; try { l = fs.readdirSync(path.join(PUB, "fotos")).filter((x) => x.endsWith(".jpg")); } catch (e) {}
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-cache" });
+    return res.end(JSON.stringify(l));
+  }
+  if (u.pathname === "/solo") { res.writeHead(301, { Location: "/solo/" }); return res.end(); }
   let f = u.pathname === "/" ? "/index.html" : decodeURIComponent(u.pathname);
+  if (f.endsWith("/")) f += "index.html";
   const fp = path.join(PUB, path.normalize(f).replace(/^(\.\.[\/\\])+/, ""));
   if (!fp.startsWith(PUB)) { res.writeHead(403); return res.end(); }
   fs.readFile(fp, (e, d) => {
@@ -238,9 +246,12 @@ function baixarFotosSozinho() {
   } catch (e) {}
 }
 setTimeout(baixarFotosSozinho, 3000);
+// modo solo sempre com a mesma versão do Leilão
+try { require("./tools/build_solo.js")(); } catch (e) { console.error("modo solo:", e.message); }
 server.listen(PORT, "0.0.0.0", () => {
   const ends = enderecos();
   console.log("\n  🎮  JOGOS DE VIAGEM rodando!   (versão " + VERSAO + ")\n");
+  console.log("  🎮  Jogar SOZINHO (contra bots): http://localhost:" + PORT + "/solo/\n");
   console.log("  Neste celular:   http://localhost:" + PORT);
   const bons = ends.filter((e) => e.tipo !== "dados");
   if (bons.length) bons.forEach((e) => console.log("  Para os amigos:  http://" + e.ip + ":" + PORT + (e.tipo === "roteador" ? "   <- roteador" : "")));
