@@ -85,6 +85,15 @@
   setInterval(() => { const r = document.getElementById("roleta"); if (r) r.textContent = "ABCDEFGHIJLMNOPRSTUV"[Math.floor(Math.random() * 20)]; }, 90);
   setInterval(() => {
     document.querySelectorAll(".timer[data-fim]").forEach((el) => (el.textContent = seg(+el.dataset.fim) + "s"));
+    // martelo do leiloeiro: "dou-lhe uma… duas… três!" + anel que esvazia
+    document.querySelectorAll(".martelo[data-fim]").forEach((el) => {
+      const rest = (+el.dataset.fim - agora()) / 1000, tot = +el.dataset.total || 5;
+      const n = el.querySelector("b"), f = el.querySelector("small"), anel = el.querySelector("circle.a");
+      if (n) n.textContent = String(Math.max(0, Math.ceil(rest))).padStart(2, "0");
+      if (f) f.textContent = el.dataset.lider ? (rest > tot * 0.66 ? "Dou-lhe uma…" : rest > tot * 0.33 ? "Dou-lhe duas…" : "Dou-lhe três…") : "Quem dá mais?";
+      if (anel) anel.style.strokeDashoffset = String(176 * (1 - Math.max(0, Math.min(1, rest / tot))));
+      el.classList.toggle("urg", rest < 2);
+    });
     document.querySelectorAll(".bar i[data-fim]").forEach((el) => { const t = +el.dataset.total; if (t) el.style.width = Math.max(0, Math.min(100, ((+el.dataset.fim - agora()) / t) * 100)) + "%"; });
   }, 250);
 
@@ -128,6 +137,7 @@
     <div style="margin-top:12px"><button class="btn full" data-fn="entrar">Entrar na sala</button></div></div>
     ${S && S.players.length ? `<div class="card"><div class="muted" style="margin-bottom:8px">${S.game ? "Caiu da sala? Toque no seu nome pra voltar pro seu lugar:" : "Já estão na sala (caiu? toque no seu nome):"}</div><div class="row">${S.players.map((p) => `<button class="pill ${p.online ? "" : "off"}" data-fn="souEu" data-n="${esc(p.name)}">${av(p.id, p.name, 22)} ${esc(p.name)}${p.online ? "" : " · caiu"}</button>`).join("")}</div></div>` : ""}`;
   }
+  FN.outroLance = () => { const el = $("#outroValor"); const n = Math.floor(+((el && el.value) || 0)); if (!n) return toast("Digite o valor do lance"); send({ type: "lance", valor: n }).then((r) => { if (!r.erro && el) el.value = ""; }); };
   FN.souEu = (b) => { $("#nomeIn").value = b.dataset.n; FN.entrar(); };
   FN.entrar = async () => {
     const n = $("#nomeIn").value.trim(); if (!n) return toast("Digite seu nome");
@@ -207,23 +217,24 @@
   // ===== LEILÃO =====
   const brl = (n) => n + "M";
   const ini = (n) => String(n).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-  const tier = (o) => (o >= 75 ? "gold" : o >= 65 ? "silver" : "bronze");
+  const tier = (o) => (o == null ? "silver" : o >= 75 ? "gold" : o >= 65 ? "silver" : "bronze");
+  const nv = (x) => (x == null ? "?" : x); // nota escondida
   const LAB = { GOL: ["ELA", "MAN", "CHU", "REF", "VEL", "POS"], X: ["RIT", "CHU", "PAS", "DRI", "DEF", "FÍS"] };
   const cardHTML = (j) => {
     const lab = j.grupo === "GOL" ? LAB.GOL : LAB.X, vals = [j.pac, j.sho, j.pas, j.dri, j.def, j.phy];
     return `<div class="fut ${tier(j.ovr)}">
-      <div class="fut-top"><div class="fut-l"><div class="fut-ovr">${j.ovr}</div><div class="fut-pos">${esc(j.pos)}</div><div class="fut-flag">${j.flag}</div></div>
+      <div class="fut-top"><div class="fut-l"><div class="fut-ovr">${nv(j.ovr)}</div><div class="fut-pos">${esc(j.pos)}</div><div class="fut-flag">${j.flag}</div></div>
         <div class="fut-av">${j.foto ? `<img src="${j.foto}" alt="" onerror="this.remove()">` : ""}<span>${esc(ini(j.nome))}</span></div></div>
       <div class="fut-nome">${esc(j.nome)}</div>
       <div class="fut-clube">${esc(j.clube)}${j.liga ? " · " + esc(j.liga) : ""}</div>
-      <div class="fut-st">${lab.map((l, i) => `<div><b>${vals[i]}</b><span>${l}</span></div>`).join("")}</div>
-      ${j.aprox ? `<div class="fut-aprox">overall aproximado</div>` : ""}</div>`;
+      <div class="fut-st">${lab.map((l, i) => `<div><b>${nv(vals[i])}</b><span>${l}</span></div>`).join("")}</div>
+      ${j.aprox && j.ovr != null ? `<div class="fut-aprox">overall aproximado</div>` : ""}</div>`;
   };
   const ORD = { GOL: 0, DEF: 1, MEI: 2, ATA: 3 };
   const faltaTxt = (f) => Object.entries(f).filter(([, n]) => n > 0).map(([g, n]) => `${n} ${g}`).join(", ");
   const teamHTML = (t, n) => `<div class="team ${t.id === pid ? "mine" : ""}"><div class="row" style="justify-content:space-between"><b>${t.bot ? "🤖 " : ""}${esc(t.nome)}${t.id === pid ? " (você)" : ""}</b><span class="tag">💵 R$ ${t.dinheiro}</span></div>
-    <div class="muted" style="font-size:12px;margin:2px 0 4px">${t.elenco.length}/${n} · ATQ ${t.r.ataque} · DEF ${t.r.defesa} · GERAL ${t.r.geral}${faltaTxt(t.falta) ? ` · falta: ${faltaTxt(t.falta)}` : ""}</div>
-    ${[...t.elenco].sort((a, b) => ORD[a.grupo] - ORD[b.grupo]).map((j) => `<div class="j"><span><span class="mini ${tier(j.ovr)}">${j.ovr}</span> ${j.foto ? `<img class="jf" src="${j.foto}" alt="" onerror="this.remove()">` : j.flag} ${esc(j.nome)} <small class="muted">${esc(j.pos)}${j.preco ? " · R$ " + j.preco : ""}</small></span></div>`).join("")}</div>`;
+    <div class="muted" style="font-size:12px;margin:2px 0 4px">${t.elenco.length}/${n}${t.r ? ` · ATQ ${t.r.ataque} · DEF ${t.r.defesa} · GERAL ${t.r.geral}` : " · notas escondidas"}${faltaTxt(t.falta) ? ` · falta: ${faltaTxt(t.falta)}` : ""}</div>
+    ${[...t.elenco].sort((a, b) => ORD[a.grupo] - ORD[b.grupo]).map((j) => `<div class="j"><span><span class="mini ${tier(j.ovr)}">${nv(j.ovr)}</span> ${j.foto ? `<img class="jf" src="${j.foto}" alt="" onerror="this.remove()">` : j.flag} ${esc(j.nome)} <small class="muted">${esc(j.pos)}${j.preco ? " · R$ " + j.preco : ""}</small></span></div>`).join("")}</div>`;
   const agrupa = (l) => { const c = {}; l.forEach((x) => (c[x.nome] = (c[x.nome] || 0) + 1)); return Object.entries(c).map(([n, k]) => esc(n) + (k > 1 ? " " + k : "")).join(", "); };
   const jogoHTML = (g, nomeT) => `<div class="jogo"><span class="t">${esc(nomeT(g.a))}</span><span class="placar">${g.ga} x ${g.gb}</span><span class="t r">${esc(nomeT(g.b))}</span></div>
     ${g.golsA.length || g.golsB.length || g.pen ? `<div class="gols">${g.golsA.length ? "⚽ " + agrupa(g.golsA) : ""}${g.golsA.length && g.golsB.length ? " · " : ""}${g.golsB.length ? "⚽ " + agrupa(g.golsB) : ""}${g.pen ? `<br>Pênaltis: ${g.pen[0]} x ${g.pen[1]}` : ""}</div>` : ""}`;
@@ -236,6 +247,23 @@
   const tabelaHTML = (v) => v.tabela && v.etapa !== undefined && v.totalRodadas ? `<div class="card" style="padding:10px"><table><tr><th>#</th><th>Time</th><th class="n">P</th><th class="n">J</th><th class="n">V</th><th class="n">E</th><th class="n">D</th><th class="n">SG</th></tr>
       ${v.tabela.map((t, i) => `<tr style="${t.id === pid ? "color:var(--ac)" : ""}"><td>${i + 1}</td><td><b>${esc(t.nome)}</b></td><td class="n"><b>${t.pts}</b></td><td class="n">${t.j}</td><td class="n">${t.v}</td><td class="n">${t.e}</td><td class="n">${t.d}</td><td class="n">${t.sg}</td></tr>`).join("")}</table></div>` : "";
   const artHTML = (v) => v.artilharia && v.artilharia.length ? `<div class="card"><b>⚽ Artilharia</b><div class="list" style="margin-top:8px">${v.artilharia.map((a, i) => `<div class="li"><span>${i + 1}. ${esc(a.nome)} <small class="muted">${esc(a.time)}</small></span><b>${a.gols}</b></div>`).join("")}</div></div>` : "";
+  // ---------- campinho (formação com as vagas) ----------
+  const curto = (n) => { const p = String(n).split(/\s+/); return p.length > 1 ? p[p.length - 1] : p[0]; };
+  function campinho(t, grande) {
+    const f = t.form || { GOL: 1, DEF: 2, MEI: 1, ATA: 1 };
+    const linha = (g) => {
+      const js = t.elenco.filter((j) => j.grupo === g);
+      const vagas = Math.max(f[g] || 0, js.length);
+      if (!vagas) return "";
+      return `<div class="cl">${Array.from({ length: vagas }, (_, i) => {
+        const j = js[i];
+        if (!j) return `<div class="cs vazio"><i>+</i>${grande ? `<small>${g}</small>` : ""}</div>`;
+        return `<div class="cs"><i class="${tier(j.ovr)}">${j.foto ? `<img src="${j.foto}" alt="" onerror="this.remove()">` : ""}<em>${esc(ini(j.nome))}</em></i>${grande ? `<small>${esc(curto(j.nome))}</small>` : ""}</div>`;
+      }).join("")}</div>`;
+    };
+    return `<div class="campo ${grande ? "g" : ""}">${["ATA", "MEI", "DEF", "GOL"].map(linha).join("")}</div>`;
+  }
+  const TAG = { lidera: "🔨 lidera", passou: "passou", completo: "✅ completo", ausente: "📵 ausente" };
   R.leilao = (v) => `<div class="tema100">${leilaoCorpo(v)}</div>`;
   function leilaoCorpo(v) {
     const nomeT = (id) => (v.times.find((t) => t.id === id) || {}).nome;
@@ -243,27 +271,40 @@
     const timesHTML = `<div class="list">${[...v.times].sort((a, b) => (a.id === pid ? -1 : b.id === pid ? 1 : 0)).map((t) => teamHTML(t, v.n)).join("")}</div>`;
     if (v.fase === "leilao" && v.lote) {
       const L = v.lote, j = L.j;
+      const dur = L.lider ? Math.min(v.tempo, 5000) : v.tempo;
       let acoes = "";
+      const podeTrocar = meu && !v.cheio && !v.precisoDessa && (v.esqOk || []).some((e) => { const [d, m, a] = e.split("-").map(Number); const f = { GOL: 1, DEF: d, MEI: m, ATA: a }; return meu.elenco.filter((x) => x.grupo === j.grupo).length < f[j.grupo]; });
       if (!meu) acoes = `<p class="muted center">Você está só assistindo</p>`;
-      else if (v.cheio) acoes = `<p class="muted center">Seu time está completo ✅</p>`;
       else if (L.vendido) acoes = "";
-      else if (!v.precisoDessa) acoes = `<p class="muted center">Você já tem todos os ${j.grupo} que precisa</p>`;
+      else if (v.cheio) acoes = `<p class="muted center">Seu time está completo ✅</p>`;
+      else if (!v.precisoDessa) acoes = `<p class="muted center" style="margin:4px 0">Sem vaga pra ${j.grupo} na sua formação.${podeTrocar ? ` <b style="color:var(--txt)">Troque a formação aí embaixo pra entrar na briga.</b>` : ""}</p>`;
       else if (L.lider === pid) acoes = `<div class="center"><b style="color:var(--ac);font-size:20px">Você está ganhando! 🔥</b></div>`;
-      else if (!L.lider) acoes = `<button class="btn huge full" data-a='${A({ type: "lance", inc: 0 })}' ${v.meuMax < L.preco ? "disabled" : ""}>Pegar por ${real(L.preco)}</button>`;
-      else acoes = `<div class="row">${[1, 2, 5].map((i) => `<button class="btn grow" style="font-size:22px;padding:18px" data-a='${A({ type: "lance", inc: i })}' ${v.meuMax < L.preco + i ? "disabled" : ""}>+${i}</button>`).join("")}</div>`;
+      else {
+        const min = L.lider ? L.preco + 1 : L.preco, max = Math.max(0, v.meuMax);
+        const b = (txt, a, ok, cls) => `<button class="btn ${cls || ""}" data-a='${A({ type: "lance", ...a })}' ${ok ? "" : "disabled"}>${txt}</button>`;
+        acoes = `${!L.lider ? `<button class="btn huge full" style="margin-bottom:8px" data-a='${A({ type: "lance", inc: 0 })}' ${max >= L.preco ? "" : "disabled"}>Pegar por ${real(L.preco)}</button>` : ""}
+          <div class="lances">${(L.lider ? [1, 5, 10] : [5, 10]).map((i) => b("+" + i, { inc: i }, max >= L.preco + i)).join("")}${b(`Tudo<small>R$ ${max}</small>`, { tudo: 1 }, max >= min, "tudo")}</div>
+          <div class="row" style="margin-top:8px;gap:6px"><input id="outroValor" type="number" inputmode="numeric" min="${min}" max="${max}" placeholder="Outro valor" style="flex:1;min-width:0"><button class="btn alt" data-fn="outroLance">Dar lance</button></div>`;
+      }
       if (meu && !v.cheio && !L.vendido && L.lider !== pid && v.precisoDessa) acoes += `<button class="btn alt full" style="margin-top:8px" data-a='${A({ type: "passar" })}' ${L.passei ? "disabled" : ""}>${L.passei ? "Você passou" : "Passar"}</button>`;
-      return `<div class="muted center" style="font-size:13px;margin-bottom:6px">💵 R$ 100 pra cada · ${esc(v.base)} · ${v.restantes} na fila</div>
-        ${cardHTML(j)}
-        <div class="card center" style="margin-top:10px;padding:12px">
-          <div class="muted">${L.vendido ? (L.lider ? "VENDIDO para" : "Ninguém quis") : L.lider ? "Maior lance" : "Lance inicial"}</div>
-          <div class="preco">${L.vendido && !L.lider ? "—" : real(L.preco)}</div>
-          ${L.lider ? `<div style="font-weight:800">${esc(L.liderNome)}</div>` : ""}
-          ${L.vendido ? "" : timerHTML(L.fim, v.tempo)}
+      const outros = [...v.times].filter((t) => t.id !== pid);
+      const esqChips = meu && !v.cheio ? `<div class="chips" style="margin-top:8px">${v.esquemas.map((e) => `<button class="chip ${e === meu.esq ? "on" : ""}" data-a='${A({ type: "formacao", esq: e })}' ${(v.esqOk || []).includes(e) ? "" : "disabled"}>${e.replace(/-/g, "-")}${v.apelidos[e] ? `<small> ${esc(v.apelidos[e])}</small>` : ""}</button>`).join("")}</div>` : "";
+      return `<div class="row muted" style="justify-content:space-between;font-size:13px;margin-bottom:6px"><b style="color:var(--txt)">Jogador ${v.numLote} de ${v.totalLotes}</b><span>💵 R$ 100 · ${esc(v.base)}${v.oculto ? " · 🙈 notas escondidas" : ""}</span></div>
+        <div class="card lote">
+          ${L.vendido ? `<div class="center" style="font-size:22px;font-weight:900;margin:4px 0 8px">${L.lider ? `🔨 VENDIDO para ${esc(L.liderNome)}` : "Ninguém quis 🤷"}</div>` : `<div class="martelo" data-fim="${L.fim}" data-total="${dur / 1000}" ${L.lider ? 'data-lider="1"' : ""}><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="28"/><circle class="a" cx="32" cy="32" r="28" style="stroke-dashoffset:${(176 * (1 - Math.max(0, Math.min(1, (L.fim - agora()) / dur)))).toFixed(1)}"/></svg><b>${String(seg(L.fim)).padStart(2, "0")}</b><small>${(() => { const r = (L.fim - agora()) / 1000, t = dur / 1000; return L.lider ? (r > t * 0.66 ? "Dou-lhe uma…" : r > t * 0.33 ? "Dou-lhe duas…" : "Dou-lhe três…") : "Quem dá mais?"; })()}</small></div>`}
+          ${cardHTML(j)}
+          <div class="center" style="margin-top:8px">
+            <div class="muted">${L.lider ? `<b style="color:var(--txt)">${esc(L.liderNome)}</b> ${L.vendido ? "levou" : "lidera"}` : L.vendido ? "" : "Lance inicial"}</div>
+            <div class="preco">${L.vendido && !L.lider ? "—" : real(L.preco)}</div>
+            ${L.hist.length > 1 ? `<div class="hist">${L.hist.slice(1).map((h) => `<div><span>${esc(h.nome)}</span><span>R$ ${h.valor}</span></div>`).join("")}</div>` : ""}
+          </div>
+          <div style="margin-top:10px">${acoes}</div>
         </div>
-        <div style="margin:10px 0">${acoes}</div>
-        ${meu ? `<div class="muted center" style="margin-bottom:10px">Seu dinheiro: <b style="color:var(--txt)">${real(meu.dinheiro)}</b> · lance máx.: <b style="color:var(--txt)">${real(Math.max(0, v.meuMax))}</b><br><small>O que sobrar no fim não vale nada!</small></div>` : ""}
+        ${meu ? `<div class="card"><div class="row" style="justify-content:space-between"><b>${esc(meu.nome)} (você)</b><span class="tag">💵 R$ ${meu.dinheiro}</span></div>
+          <div class="muted" style="font-size:12px;margin:2px 0 8px">${v.cheio ? `Time fechado ✅ · sobrou R$ ${meu.dinheiro}` : `lance máx. ${real(Math.max(0, v.meuMax))} · o que sobrar no fim não vale nada!`}</div>
+          ${campinho(meu, true)}${esqChips}</div>` : ""}
         ${v.log.length ? `<div class="card"><div class="list">${v.log.map((l) => `<div class="muted" style="font-size:14px">• ${esc(l)}</div>`).join("")}</div></div>` : ""}
-        ${timesHTML}`;
+        <div class="campos">${outros.map((t) => `<div class="mini-time ${t.tag === "lidera" ? "lid" : ""}"><div class="row" style="justify-content:space-between;gap:4px"><b>${t.bot ? "🤖 " : ""}${esc(t.nome)}</b><small>R$ ${t.dinheiro}</small></div>${t.tag ? `<span class="tg ${t.tag}">${TAG[t.tag]}</span>` : `<span class="tg vz"> </span>`}${campinho(t, false)}</div>`).join("")}</div>`;
     }
     if (v.fase === "times") {
       return `<div class="card center"><h2>Elencos fechados! ⚽</h2><p class="muted">Formato: <b style="color:var(--txt)">${esc(v.formato)}</b>. As partidas são ao vivo: dá pra mudar a tática durante o jogo.</p>

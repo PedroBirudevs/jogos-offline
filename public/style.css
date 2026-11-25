@@ -170,3 +170,36 @@ code{background:var(--p2);padding:2px 6px;border-radius:6px}
 #conn.hide{opacity:0;pointer-events:none}
 button.pill{font:inherit;color:inherit;cursor:pointer}
 .sticky-bot{position:sticky;bottom:8px;z-index:5;box-shadow:0 -6px 24px rgba(0,0,0,.45)}
+
+/* ===== leilão estilo 100pracada ===== */
+.lote{padding:12px}
+.martelo{position:relative;width:96px;height:96px;margin:0 auto 6px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.martelo svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.martelo circle{fill:none;stroke:rgba(255,255,255,.12);stroke-width:5}
+.martelo circle.a{stroke:var(--ac);stroke-linecap:round;stroke-dasharray:176;transition:stroke-dashoffset .25s linear}
+.martelo b{position:relative;font-size:26px;font-weight:900;line-height:1;z-index:1}
+.martelo small{position:relative;margin-top:2px;font-size:10px;font-weight:700;opacity:.85;z-index:1;white-space:nowrap}
+.martelo.urg circle.a{stroke:#ff5d6c}.martelo.urg b{color:#ff5d6c}
+.hist{max-width:240px;margin:2px auto 0;font-size:13px;opacity:.6}.hist div{display:flex;justify-content:space-between}
+.lances{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.lances .btn{font-size:20px;padding:14px 4px;display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.lances .btn small{font-size:11px;opacity:.8}
+.lances .tudo{background:#ffcf3f;color:#2a2000}
+.campo{background:linear-gradient(180deg,#1f8a4c,#17703d);border-radius:12px;padding:8px 4px;display:flex;flex-direction:column;gap:6px;border:1px solid rgba(255,255,255,.15)}
+.campo .cl{display:flex;justify-content:space-around}
+.cs{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+.cs i{position:relative;width:24px;height:24px;border-radius:50%;background:#fff;color:#123;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:9px;font-weight:900;overflow:hidden;border:2px solid rgba(255,255,255,.7)}
+.cs i img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 15%}
+.cs i.gold{border-color:#ffcf3f}.cs i.bronze{border-color:#c98b5a}
+.cs.vazio i{background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);border:1px dashed rgba(255,255,255,.5);font-size:14px}
+.cs small{font-size:10px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff}
+.campo.g .cs i{width:44px;height:44px;font-size:13px}
+.campos{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+.mini-time{background:var(--p2);border-radius:12px;padding:8px;font-size:13px;border:2px solid transparent}
+.mini-time.lid{border-color:#ffcf3f}
+.mini-time b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tg{display:inline-block;font-size:11px;font-weight:700;margin:3px 0 5px;padding:1px 7px;border-radius:999px;background:rgba(255,255,255,.08);min-height:16px}
+.tg.lidera{background:#ffcf3f;color:#2a2000}.tg.completo{background:#3ddc84;color:#06210f}.tg.ausente{background:#ff5d6c;color:#fff}
+.chip small{opacity:.7;font-size:10px}
+.chip[disabled]{opacity:.35}
+.tg:empty,.tg.vz{background:none}

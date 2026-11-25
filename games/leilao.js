@@ -56,14 +56,17 @@ function montarFila(base, nTimes, form) {
 }
 const FORMACAO = { 5: { GOL: 1, DEF: 2, MEI: 1, ATA: 1 }, 7: { GOL: 1, DEF: 2, MEI: 2, ATA: 2 }, 11: { GOL: 1, DEF: 4, MEI: 3, ATA: 3 } };
 const ESQUEMAS = {
-  5: ["2-1-1", "1-2-1", "1-1-2", "3-1-0"],
-  7: ["2-2-2", "3-2-1", "2-3-1", "2-1-3", "4-1-1"],
+  5: ["2-1-1", "1-2-1", "1-1-2", "2-0-2", "3-0-1", "1-0-3", "3-1-0"],
+  7: ["2-2-2", "3-2-1", "2-3-1", "2-1-3", "3-1-2", "4-1-1"],
   11: ["4-3-3", "4-4-2", "3-5-2", "4-2-4", "5-3-2", "5-4-1"],
 };
 const ESTILOS = ["Equilibrado", "Toque de bola", "Contra-ataque", "Jogo direto"];
 const POSTURAS = ["Retranca", "Defensiva", "Equilibrada", "Ofensiva", "Tudo pro ataque"];
 const BOTS = ["Bot Tite", "Bot Abel", "Bot Felipão", "Bot Ancelotti", "Bot Dorival", "Bot Renato", "Bot Luxemburgo", "Bot Jorge Jesus", "Bot Diniz", "Bot Cuca", "Bot Mano", "Bot Zagallo"];
 const ORC = 100;
+const MARTELO = 5000; // depois de um lance: "dou-lhe uma, dou-lhe duas…" — 5s pra alguém cobrir
+const APELIDO_ESQ = { "3-0-1": "Retranca", "1-0-3": "Tudo ou nada", "3-1-0": "Ônibus", "4-1-1": "Retranca", "2-1-3": "Ataque total" };
+const esqParaForm = (e) => { const [d, m, a] = e.split("-").map(Number); return { GOL: 1, DEF: d, MEI: m, ATA: a }; };
 const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const avg = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -135,26 +138,31 @@ module.exports = {
     { id: "formato", nome: "Formato do campeonato", valores: ["Pontos corridos + mata-mata", "Pontos corridos", "Mata-mata"], padrao: "Pontos corridos + mata-mata" },
     { id: "bots", nome: "Bots pra completar", valores: ["Nenhum", "Até 4 times", "Até 6 times", "Até 8 times"], padrao: "Nenhum" },
     { id: "tempo", nome: "Segundos por lance", valores: [10, 8, 15], padrao: 10 },
+    { id: "nota", nome: "Overall dos jogadores", valores: ["Mostrar", "Esconder (tem que conhecer!)"], padrao: "Mostrar" },
   ],
 
   init(list, o, ctx) {
     const n = Number(parseInt(o.elenco)) || 5;
     const alvo = { "Até 4 times": 4, "Até 6 times": 6, "Até 8 times": 8 }[o.bots] || 0;
-    const times = list.map((p) => ({ id: p.id, nome: p.name, dinheiro: ORC, elenco: [], bot: false }));
+    const esq0 = ESQUEMAS[n][0];
+    const times = list.map((p) => ({ id: p.id, nome: p.name, dinheiro: ORC, elenco: [], bot: false, esq: esq0, form: esqParaForm(esq0) }));
     const nb = Math.max(alvo - times.length, times.length < 2 ? 1 : 0);
-    shuffle(BOTS).slice(0, nb).forEach((nome, i) => times.push({ id: "bot" + i, nome, dinheiro: ORC, elenco: [], bot: true, estilo: Math.random() }));
+    shuffle(BOTS).slice(0, nb).forEach((nome, i) => times.push({ id: "bot" + i, nome, dinheiro: ORC, elenco: [], bot: true, estilo: Math.random(), esq: esq0, form: esqParaForm(esq0) }));
     const base = (BASES[o.base] || BASES["Brasileirão"])();
     const { pool, reserva } = montarFila(base, times.length, FORMACAO[n]);
     const st = {
       fase: "leilao", base: o.base || "Brasileirão", n, form: { ...FORMACAO[n] }, tempo: (Number(o.tempo) || 10) * 1000,
       formato: o.formato || "Pontos corridos + mata-mata", times, pool, reserva, lote: null, log: [], timer: null, lotes: 0,
-      fator: 5 / n, tatica: {},
+      fator: 5 / n, tatica: {}, esconde: /Esconder/.test(o.nota || ""),
     };
+    st.totalFila = Object.values(pool).reduce((s, x) => s + x.length, 0);
     this._proximo(st, ctx);
     return st;
   },
   _time(st, id) { return st.times.find((t) => t.id === id); },
-  _falta(st, t, g) { return st.form[g] - t.elenco.filter((j) => j.grupo === g).length; },
+  // cada time tem a SUA formação (dá pra trocar no meio do leilão, igual no 100pracada)
+  _falta(st, t, g) { return (t.form || st.form)[g] - t.elenco.filter((j) => j.grupo === g).length; },
+  _cabe(t, esq) { const f = esqParaForm(esq); return ["GOL", "DEF", "MEI", "ATA"].every((g) => t.elenco.filter((j) => j.grupo === g).length <= f[g]); },
   _cheio(st, t) { return t.elenco.length >= st.n; },
   _max(st, t) { return t.dinheiro - (st.n - t.elenco.length - 1); },
   _base(st, ovr) { return Math.max(1, Math.round((Math.pow(Math.max(0, ovr - 68), 1.55) / 2.2) * st.fator)); },
@@ -186,13 +194,14 @@ module.exports = {
     }
     const j = P.splice(idx, 1)[0];
     st.lotes++;
-    st.lote = { j, preco: 1 /* todo jogador começa em R$ 1 */, lider: null, fim: ctx.now() + st.tempo, passou: [], vendido: false };
+    st.lote = { j, preco: 1 /* todo jogador começa em R$ 1 */, lider: null, fim: ctx.now() + st.tempo, passou: [], vendido: false, hist: [] };
     st.timer = ctx.later(st.tempo, () => this._fechar(st, ctx));
     this._botsPensam(st, ctx);
   },
   _fimLeilao(st, ctx) {
     st.lote = null; st.fase = "times";
-    for (const t of st.times) st.tatica[t.id] = { form: ESQUEMAS[st.n][0], estilo: "Equilibrado", postura: "Equilibrada" };
+    // a formação montada no leilão vira a formação do primeiro jogo
+    for (const t of st.times) st.tatica[t.id] = { form: t.esq || ESQUEMAS[st.n][0], estilo: "Equilibrado", postura: "Equilibrada" };
   },
   _fechar(st, ctx) {
     const L = st.lote; if (!L || L.vendido) return;
@@ -200,8 +209,8 @@ module.exports = {
     if (L.lider) {
       const t = this._time(st, L.lider);
       t.dinheiro -= L.preco; t.elenco.push({ ...L.j, preco: L.preco });
-      st.log.unshift(`${t.nome} levou ${L.j.nome} (${L.j.ovr}) por R$ ${L.preco}`);
-    } else st.log.unshift(`Ninguém quis ${L.j.nome} (${L.j.ovr})`);
+      st.log.unshift(`${t.nome} levou ${L.j.nome}${st.esconde ? "" : ` (${L.j.ovr})`} por R$ ${L.preco}`);
+    } else st.log.unshift(`Ninguém quis ${L.j.nome}${st.esconde ? "" : ` (${L.j.ovr})`}`);
     st.log = st.log.slice(0, 6);
     L.fim = ctx.now() + 2200;
     st.timer = ctx.later(2200, () => this._proximo(st, ctx));
@@ -220,13 +229,18 @@ module.exports = {
     const ativos = st.times.filter((t) => t.id !== L.lider && this._pode(st, t, L.lider ? L.preco + 1 : L.preco));
     if (ativos.every((t) => L.passou.includes(t.id))) this._fechar(st, ctx);
   },
-  _lance(st, t, inc, ctx) {
+  // inc: quanto somar (+1/+5/+10); valor: lance exato ("Outro valor" / "Tudo")
+  _lance(st, t, inc, ctx, valorExato) {
     const L = st.lote;
-    const valor = L.lider ? L.preco + Math.max(1, Number(inc) || 1) : L.preco;
+    const minimo = L.lider ? L.preco + 1 : L.preco;
+    let valor = valorExato ? Math.floor(Number(valorExato)) : L.lider ? L.preco + Math.max(1, Number(inc) || 1) : L.preco + Math.max(0, Number(inc) || 0);
+    if (!(valor >= minimo)) return `O lance tem que ser pelo menos R$ ${minimo}`;
     if (valor > this._max(st, t)) return `Você só pode dar até R$ ${this._max(st, t)}`;
     L.preco = valor; L.lider = t.id; L.passou = L.passou.filter((x) => x !== t.id);
-    L.fim = ctx.now() + st.tempo;
-    ctx.cancel(st.timer); st.timer = ctx.later(st.tempo, () => this._fechar(st, ctx));
+    L.hist = [{ nome: t.nome, valor }, ...(L.hist || [])].slice(0, 4);
+    const dur = Math.min(st.tempo, MARTELO);
+    L.fim = ctx.now() + dur;
+    ctx.cancel(st.timer); st.timer = ctx.later(dur, () => this._fechar(st, ctx));
     this._checaPasses(st, ctx);
     if (!L.vendido) this._botsPensam(st, ctx);
   },
@@ -360,7 +374,15 @@ module.exports = {
       if (this._cheio(st, t)) return "Seu time já está completo";
       if (this._falta(st, t, L.j.grupo) <= 0) return `Você já tem todos os ${L.j.grupo} que precisa`;
       if (L.lider === pid) return "Você já está ganhando";
-      return this._lance(st, t, a.inc, ctx);
+      const exato = a.tudo ? this._max(st, t) : a.valor;
+      return this._lance(st, t, a.inc, ctx, exato);
+    }
+    if (a.type === "formacao" && st.fase === "leilao" && t) {
+      if (!ESQUEMAS[st.n].includes(a.esq)) return;
+      if (!this._cabe(t, a.esq)) return "Seus jogadores não cabem nessa formação";
+      t.esq = a.esq; t.form = esqParaForm(a.esq);
+      if (st.lote && !st.lote.vendido) this._checaPasses(st, ctx);
+      return;
     }
     if (a.type === "passar" && st.fase === "leilao") {
       const L = st.lote; if (!L || L.vendido || L.lider === pid) return;
@@ -409,17 +431,30 @@ module.exports = {
       .sort((a, b) => b.pts - a.pts || b.sg - a.sg || b.gp - a.gp || b.v - a.v);
   },
   _artilharia(st) { return Object.values(st.gols || {}).sort((a, b) => b.gols - a.gols).slice(0, 8); },
-  view(st, pid) {
+  view(st, pid, ctx) {
     const me = this._time(st, pid);
-    const times = st.times.map((t) => ({ id: t.id, nome: t.nome, bot: t.bot, dinheiro: t.dinheiro, elenco: t.elenco.map(pub), r: ratings(t), falta: Object.fromEntries(["GOL", "DEF", "MEI", "ATA"].map((g) => [g, this._falta(st, t, g)])) }));
-    const v = { fase: st.fase, n: st.n, form: st.form, base: st.base, formato: st.formato, times, log: st.log, tempo: st.tempo, orc: ORC };
+    // modo "nota escondida": durante o leilão ninguém vê overall nem atributos (tem que conhecer o jogador!)
+    const oculto = st.esconde && st.fase === "leilao";
+    const pj = (j) => { const x = pub(j); if (x && oculto) { for (const k of ["ovr", "pac", "sho", "pas", "dri", "def", "phy"]) x[k] = null; } return x; };
+    const L0 = st.fase === "leilao" ? st.lote : null;
+    const times = st.times.map((t) => ({
+      id: t.id, nome: t.nome, bot: t.bot, dinheiro: t.dinheiro, elenco: t.elenco.map(pj), r: oculto ? null : ratings(t), esq: t.esq, form: t.form || st.form,
+      falta: Object.fromEntries(["GOL", "DEF", "MEI", "ATA"].map((g) => [g, this._falta(st, t, g)])),
+      tag: !L0 ? "" : this._cheio(st, t) ? "completo" : L0.lider === t.id ? "lidera" : !t.bot && ctx && !ctx.online(t.id) ? "ausente" : L0.passou.includes(t.id) ? "passou" : "",
+    }));
+    const v = { fase: st.fase, n: st.n, form: st.form, base: st.base, formato: st.formato, times, log: st.log, tempo: st.tempo, orc: ORC, oculto, esquemas: ESQUEMAS[st.n], apelidos: APELIDO_ESQ };
     if (st.fase === "leilao" && st.lote) {
       const L = st.lote;
-      v.lote = { j: pub(L.j), preco: L.preco, lider: L.lider, liderNome: L.lider ? this._time(st, L.lider).nome : null, fim: L.fim, vendido: L.vendido, passei: L.passou.includes(pid) };
+      v.lote = { j: pj(L.j), preco: L.preco, lider: L.lider, liderNome: L.lider ? this._time(st, L.lider).nome : null, fim: L.fim, vendido: L.vendido, passei: L.passou.includes(pid), hist: L.hist || [] };
       v.restantes = Object.values(st.pool).reduce((s, x) => s + x.length, 0);
-      if (me) { v.meuMax = this._max(st, me); v.cheio = this._cheio(st, me); v.precisoDessa = this._falta(st, me, L.j.grupo) > 0; }
+      v.numLote = st.lotes; v.totalLotes = Math.max(st.totalFila || 0, st.lotes + v.restantes);
+      if (me) {
+        v.meuMax = this._max(st, me); v.cheio = this._cheio(st, me); v.precisoDessa = this._falta(st, me, L.j.grupo) > 0;
+        v.minhaEsq = me.esq;
+        v.esqOk = ESQUEMAS[st.n].filter((e) => this._cabe(me, e));
+      }
     }
-    if (st.tatica[pid]) { v.minhaTatica = st.tatica[pid]; v.esquemas = ESQUEMAS[st.n]; v.estilos = ESTILOS; v.posturas = POSTURAS; }
+    if (st.tatica[pid]) { v.minhaTatica = st.tatica[pid]; v.estilos = ESTILOS; v.posturas = POSTURAS; }
     if (st.jogos) {
       v.min = st.min; v.titulo = st.titulo; v.mata = st.mata; v.etapa = st.etapa;
       v.jogos = st.jogos.map((g) => ({ ...g, tatA: st.tatica[g.a], tatB: st.tatica[g.b] }));
