@@ -20,6 +20,40 @@ function escalaLiga(lista) {
   });
 }
 for (const l of LIGAS) { const lst = escalaLiga(ALL.filter((p) => p.liga === l)); BASES[l] = () => lst; }
+// ---------- fila do leilão: só titulares bons, na medida certa ----------
+// Titular = os melhores de cada clube por posição (1 GOL, 4 DEF, 3 MEI, 3 ATA, como num 4-3-3).
+const TITULARES = { GOL: 1, DEF: 4, MEI: 3, ATA: 3 };
+function titulares(lista) {
+  const porClube = {};
+  for (const p of lista) (porClube[p.clube] = porClube[p.clube] || []).push(p);
+  const out = [];
+  for (const js of Object.values(porClube))
+    for (const g in TITULARES) out.push(...js.filter((p) => p.grupo === g).sort((a, b) => b.ovr - a.ovr).slice(0, TITULARES[g]));
+  return out;
+}
+// Quantos entram: (times × vagas da posição) + 2 sobras por time, repartidas entre as posições.
+// Ex.: 10 times de 5 → 50 vagas + 20 sobras = 70 jogadores. Sorteados entre os melhores titulares, então cada leilão é diferente.
+function montarFila(base, nTimes, form) {
+  const tits = titulares(base);
+  const vagas = Object.values(form).reduce((s, x) => s + x, 0);
+  const extras = 2 * nTimes;
+  const pool = {}, reserva = {};
+  let sobrou = extras;
+  const gs = ["GOL", "DEF", "MEI", "ATA"];
+  const ext = {};
+  gs.forEach((g) => { ext[g] = Math.floor((extras * form[g]) / vagas); sobrou -= ext[g]; });
+  for (const g of ["ATA", "MEI", "DEF", "GOL"]) if (sobrou > 0) { ext[g]++; sobrou--; }
+  for (const g of gs) {
+    const cands = tits.filter((p) => p.grupo === g).sort((a, b) => b.ovr - a.ovr);
+    const k = nTimes * form[g] + ext[g];
+    const topo = cands.slice(0, Math.min(cands.length, Math.ceil(k * 1.6))); // só os bons
+    const escolhidos = shuffle(topo).slice(0, k);
+    const ids = new Set(escolhidos.map((p) => p.id));
+    pool[g] = escolhidos.sort((a, b) => b.ovr - a.ovr);
+    reserva[g] = cands.filter((p) => !ids.has(p.id)); // se faltar (ninguém quis alguém), puxa daqui
+  }
+  return { pool, reserva };
+}
 const FORMACAO = { 5: { GOL: 1, DEF: 2, MEI: 1, ATA: 1 }, 7: { GOL: 1, DEF: 2, MEI: 2, ATA: 2 }, 11: { GOL: 1, DEF: 4, MEI: 3, ATA: 3 } };
 const ESQUEMAS = {
   5: ["2-1-1", "1-2-1", "1-1-2", "3-1-0"],
@@ -110,11 +144,10 @@ module.exports = {
     const nb = Math.max(alvo - times.length, times.length < 2 ? 1 : 0);
     shuffle(BOTS).slice(0, nb).forEach((nome, i) => times.push({ id: "bot" + i, nome, dinheiro: ORC, elenco: [], bot: true, estilo: Math.random() }));
     const base = (BASES[o.base] || BASES["Brasileirão"])();
-    const pool = {};
-    for (const g of ["GOL", "DEF", "MEI", "ATA"]) pool[g] = base.filter((p) => p.grupo === g).sort((a, b) => b.ovr - a.ovr);
+    const { pool, reserva } = montarFila(base, times.length, FORMACAO[n]);
     const st = {
       fase: "leilao", base: o.base || "Brasileirão", n, form: { ...FORMACAO[n] }, tempo: (Number(o.tempo) || 10) * 1000,
-      formato: o.formato || "Pontos corridos + mata-mata", times, pool, lote: null, log: [], timer: null, lotes: 0,
+      formato: o.formato || "Pontos corridos + mata-mata", times, pool, reserva, lote: null, log: [], timer: null, lotes: 0,
       fator: 5 / n, tatica: {},
     };
     this._proximo(st, ctx);
@@ -140,6 +173,9 @@ module.exports = {
     let r = Math.random() * tot, g = "ATA";
     for (const k in need) { r -= need[k]; if (r <= 0) { g = k; break; } }
     const P = st.pool[g];
+    // acabou a fila dessa posição (gente que ninguém quis): puxa o próximo titular bom que ficou de fora
+    // (no máximo 1 por time no leilão todo, pra não virar fila infinita)
+    if (!P.length && st.reserva && st.reserva[g].length && (st.puxados = (st.puxados || 0) + 1) <= st.times.length) P.push(st.reserva[g].shift());
     if (!P.length) { this._completar(st, g); return this._proximo(st, ctx); }
     const precisam = st.times.filter((t) => !this._cheio(st, t) && this._falta(st, t, g) > 0);
     const teto = Math.max(1, ...precisam.map((t) => this._max(st, t)));
