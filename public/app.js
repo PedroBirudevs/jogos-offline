@@ -562,7 +562,7 @@
 
   // ===== STOP =====
   let stopT;
-  FN.stopIn = () => { clearTimeout(stopT); stopT = setTimeout(() => send({ type: "resp", resp: lerStop() }), 500); };
+  FN.stopIn = () => { clearTimeout(stopT); local.stopPend = true; stopT = setTimeout(() => { local.stopPend = false; send({ type: "resp", resp: lerStop() }); }, 350); };
   const lerStop = () => S.game.view.cats.map((_, i) => ($("#st" + i) || {}).value || "");
   FN.darStop = () => send({ type: "stop", resp: lerStop() });
   R.stop = (v) => {
@@ -570,6 +570,8 @@
     if (v.fase === "fim") return placarHTML(v.placar, "✋ Resultado final") + voltar;
     if (!v.jogando) return `<div class="card center muted">Rodada em andamento.</div>` + pl;
     if (v.fase === "contagem") return `<div class="card center"><div class="muted">Rodada ${v.r}/${v.rodadas}</div><div class="letra roleta" id="roleta">A</div><p>Sorteando a letra… <b class="timer" data-fim="${v.fim}"></b></p><div class="row" style="justify-content:center">${v.cats.map((c) => `<span class="pill">${esc(c)}</span>`).join("")}</div></div>` + pl;
+    // alguém deu STOP enquanto eu digitava: manda na hora o que eu já tinha escrito (o dono aceita por mais 1,5s)
+    if (v.fase !== "escrevendo" && local.stopPend) { clearTimeout(stopT); local.stopPend = false; const r = lerStop(); if (r.some(Boolean)) send({ type: "resp", resp: r }); }
     if (v.fase === "escrevendo" || v.fase === "parou") {
       const trava = v.fase === "parou";
       // rodada nova: limpa; voltou depois de cair/recarregar: puxa o que já tinha escrito (fica salvo no dono da sala)
@@ -593,7 +595,7 @@
     }
     if (v.fase === "correcao") {
       return `<div class="card"><h2>${v.juiz ? "🤖 Juiz automático" : "Resultado da votação"} — letra ${v.letra}</h2><p class="muted" style="margin:4px 0 0">${v.juiz ? `O juiz já tirou o que não existe ou não é do tema. Discorda? Toque na resposta: com ${v.maioria} voto${v.maioria > 1 ? "s" : ""} ela muda.` : "Votação fechada."} Igual = 5, única = 10.</p></div>
-        ${v.tabela.map((t, c) => `<div class="card"><b>${esc(t.cat)}</b>${t.linhas.map((l) => (v.juiz ? cel(l, c) : cel({ ...l, id: pid }, c))).join("")}</div>`).join("")}
+        ${v.tabela.map((t, c) => `<div class="card"><b>${esc(t.cat)}</b>${v.juiz && v.semJuiz && v.semJuiz[c] ? ` <small class="muted">🗳️ sem juiz — a galera confere</small>` : ""}${t.linhas.map((l) => (v.juiz ? cel(l, c) : cel({ ...l, id: pid }, c))).join("")}</div>`).join("")}
         <div class="card"><b>Pontos da rodada</b><div class="list" style="margin-top:6px">${Object.entries(v.rodadaPts).map(([id, p]) => `<div class="li"><span>${esc(nome(id))}</span><b>+${p}</b></div>`).join("")}</div></div>
         <button class="btn full" data-a='${A({ type: "proxima" })}'>${v.r >= v.rodadas ? "Ver resultado" : "Próxima rodada"}</button>` + pl;
     }

@@ -1,17 +1,27 @@
 // Stop (Adedonha)
 const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
 const LETRAS = "ABCDEFGHIJLMNOPRSTUV".split("");
-const CATS = ["Nome", "Animal", "Cidade/Estado/País", "Comida", "Cor", "Objeto", "Profissão", "Marca", "Filme/Série", "Time de futebol",
-  "Fruta", "Parte do corpo", "Jogador de futebol", "Cantor(a)", "Música", "Personagem", "Coisa que tem na cozinha", "Bebida", "Esporte", "Carro",
-  "App ou site", "Jogo de videogame", "Doce", "Coisa de praia", "Instrumento musical", "Coisa que voa", "Desenho animado", "Xingamento leve", "Peça de roupa", "Coisa de viagem",
-  "Novela", "Youtuber/Streamer", "Verbo", "Coisa da escola", "Remédio", "Coisa redonda", "Lugar da cidade", "Comida típica", "Inseto", "Planta/Flor"];
-const FIXOS = ["Nome", "Animal", "Cidade/Estado/País", "Comida"];
+// ~90 temas. Os que têm dicionário o juiz confere sozinho; os outros (🗳️) a galera confere tocando na resposta.
+const CATS = ["Nome", "Nome masculino", "Nome feminino", "Sobrenome", "Animal", "Ave", "Peixe", "Inseto", "Animal marinho", "Cidade/Estado/País", "País", "Capital", "Estado do Brasil",
+  "Comida", "Comida típica", "Fruta", "Legume/Verdura", "Doce", "Bebida", "Tempero", "Cor", "Objeto", "Profissão", "Marca", "Marca de carro", "Carro", "Parte do carro",
+  "Filme", "Série", "Filme/Série", "Novela", "Desenho animado", "Personagem", "Super-herói/Vilão", "Personagem de anime", "Pokémon",
+  "Time de futebol", "Jogador de futebol", "Esporte", "Cantor(a)", "Banda", "Ritmo musical", "Música", "Instrumento musical",
+  "App ou site", "Rede social", "Jogo de videogame", "Youtuber/Streamer",
+  "Parte do corpo", "Remédio", "Peça de roupa", "Planta/Flor", "Coisa que tem na cozinha", "Coisa que tem no banheiro", "Cômodo da casa", "Móvel", "Eletrodoméstico",
+  "Ferramenta", "Brinquedo", "Coisa da escola", "Matéria escolar", "Lugar da cidade", "Meio de transporte", "Coisa de praia", "Coisa que voa", "Coisa de festa",
+  // sem dicionário (a galera confere)
+  "Coisa de viagem", "Coisa redonda", "Coisa vermelha", "Coisa gelada", "Coisa quente", "Coisa que tem no quarto", "Coisa que fede", "Coisa que se faz no ônibus",
+  "Xingamento leve", "Verbo", "Adjetivo", "Palavra em inglês", "Apelido", "Desculpa pra faltar aula", "Presente ruim", "Motivo de briga", "Coisa que a mãe fala"];
+const FIXOS = ["Nome", "Cidade/Estado/País"]; // sempre tem; o resto é sorteado a cada rodada
 
 // ===== juiz automático (offline): dicionário + tolerância a plural e erro de digitação =====
 const DIC = {};
 try {
   const raw = require("../data/dicionario.json");
-  const junta = { Comida: ["Comida", "Fruta", "Doce"], "Comida típica": ["Comida"], Animal: ["Animal", "Inseto"], "Coisa que voa": [] };
+  const junta = { Comida: ["Comida", "Fruta", "Doce", "Legume/Verdura", "Comida típica"], "Comida típica": ["Comida típica", "Comida"], Animal: ["Animal", "Inseto", "Ave", "Peixe", "Animal marinho"],
+    "Filme/Série": ["Filme", "Série", "Desenho animado", "Novela"], Doce: ["Doce"], Objeto: ["Objeto", "Ferramenta", "Móvel", "Eletrodoméstico", "Brinquedo", "Coisa da escola"],
+    "Cidade/Estado/País": ["Cidade/Estado/País", "Capital", "País", "Estado do Brasil"], Personagem: ["Personagem", "Super-herói/Vilão", "Personagem de anime", "Pokémon"],
+    Carro: ["Carro", "Marca de carro"], "Coisa que voa": ["Coisa que voa", "Ave"] };
   for (const k of Object.keys(raw)) DIC[k] = raw[k];
   for (const [k, fontes] of Object.entries(junta)) if (fontes.length) DIC[k] = [...new Set(fontes.flatMap((f) => raw[f] || []))];
 } catch (e) { console.log("dicionario.json não encontrado — juiz automático desligado"); }
@@ -77,17 +87,28 @@ module.exports = {
   ],
   init(list, o, ctx) {
     const juiz = o.correcao !== "Votação" && Object.keys(IDX).length > 0;
-    // no juiz automático só entram temas que ele sabe conferir
-    const pool = (juiz ? CHECAVEIS : CATS).filter((c) => !FIXOS.includes(c)).sort(() => Math.random() - 0.5);
     const st = {
       jog: list, rodadas: Number(o.rodadas) || 5, tempo: (Number(o.tempo) || 90) * 1000, juiz,
-      cats: [...FIXOS, ...pool].slice(0, Number(o.temas) || 8), r: 0, usadas: [], pts: Object.fromEntries(list.map((p) => [p.id, 0])),
+      nTemas: Number(o.temas) || 8, catsUsadas: [], cats: [], r: 0, usadas: [], pts: Object.fromEntries(list.map((p) => [p.id, 0])),
     };
     this._nova(st, ctx);
     return st;
   },
+  // temas novos a cada rodada, sem repetir até acabar a lista. No juiz automático, no máximo 2 sem dicionário (🗳️)
+  _sorteiaTemas(st) {
+    let livres = CATS.filter((c) => !FIXOS.includes(c) && !st.catsUsadas.includes(c));
+    if (livres.length < st.nTemas) { st.catsUsadas = []; livres = CATS.filter((c) => !FIXOS.includes(c)); }
+    livres.sort(() => Math.random() - 0.5);
+    const com = livres.filter((c) => CHECAVEIS.includes(c)), sem = livres.filter((c) => !CHECAVEIS.includes(c));
+    const n = st.nTemas - FIXOS.length;
+    const nSem = st.juiz ? Math.min(2, Math.round(n * 0.25), sem.length) : Math.min(sem.length, Math.round(n * 0.35));
+    const escolhidos = [...sem.slice(0, nSem), ...com.slice(0, n - nSem)].sort(() => Math.random() - 0.5);
+    st.catsUsadas.push(...escolhidos);
+    st.cats = [...FIXOS, ...escolhidos];
+  },
   _nova(st, ctx) {
     st.r++;
+    this._sorteiaTemas(st);
     const livres = LETRAS.filter((l) => !st.usadas.includes(l));
     st.letra = livres[Math.floor(Math.random() * livres.length)]; st.usadas.push(st.letra);
     st.resp = Object.fromEntries(st.jog.map((p) => [p.id, st.cats.map(() => "")]));
@@ -99,22 +120,28 @@ module.exports = {
   },
   _parar(st, pid, ctx) {
     ctx.cancel(st.timer);
-    st.quemParou = pid; st.fase = "parou"; st.fim = ctx.now() + 3000;
-    ctx.later(3000, () => {
-      // veredito do juiz pra cada resposta (true/false); na votação fica tudo valendo até a galera tirar
+    st.quemParou = pid; st.graca = ctx.now() + 1500; // quem ainda estava digitando tem 1,5s pra resposta chegar (a tela muda na hora)
+    this._corrige(st, ctx);
+  },
+  _vereditos(st) {
       st.auto = {};
       for (const p of st.jog) st.cats.forEach((cat, c) => {
         const v = norm(st.resp[p.id][c]);
         const letraOk = !!v && v[0] === st.letra.toLowerCase();
         st.auto[p.id + ":" + c] = !letraOk ? false : st.juiz ? confere(cat, st.resp[p.id][c]) !== false : true;
       });
+  },
+  _corrige(st, ctx) {
+    {
+      // veredito do juiz pra cada resposta (true/false); na votação fica tudo valendo até a galera tirar
+      this._vereditos(st);
       if (st.juiz) { st.fase = "correcao"; return; }
       // votação: TODOS os temas na mesma tela, um relógio só. Ninguém "passa na frente" de ninguém.
       st.fase = "votacao"; st.prontos = [];
       const dur = Math.min(150, 15 * st.cats.length) * 1000;
       st.fim = ctx.now() + dur;
       st.timerVot = ctx.later(dur, () => { if (st.fase === "votacao") this._fimVotacao(st, ctx); });
-    });
+    }
   },
   _fimVotacao(st, ctx) { ctx.cancel(st.timerVot); st.fase = "correcao"; },
   // quem ainda falta apertar "Pronto" (só conta quem está conectado — quem caiu não trava ninguém)
@@ -141,9 +168,10 @@ module.exports = {
   _confere: confere,
   act(st, pid, a, ctx) {
     if (st.pts[pid] === undefined) return "Você está só assistindo";
-    if (a.type === "resp" && (st.fase === "escrevendo" || st.fase === "parou")) {
+    if (a.type === "resp" && (st.fase === "escrevendo" || ((st.fase === "correcao" || st.fase === "votacao") && ctx.now() < (st.graca || 0)))) {
       const arr = Array.isArray(a.resp) ? a.resp : [];
       st.resp[pid] = st.cats.map((_, i) => String(arr[i] || "").slice(0, 30));
+      if (st.fase !== "escrevendo") this._vereditos(st); // chegou atrasada (logo depois do STOP): ainda vale
       return;
     }
     if (a.type === "stop" && st.fase === "escrevendo") {
@@ -176,7 +204,7 @@ module.exports = {
   _placar(st) { return st.jog.map((p) => ({ id: p.id, nome: p.name, pts: st.pts[p.id] })).sort((a, b) => b.pts - a.pts); },
   view(st, pid, ctx) {
     const nome = (id) => (st.jog.find((p) => p.id === id) || {}).name;
-    const v = { juiz: st.juiz, maioria: this._maioria(st), fase: st.fase, r: st.r, rodadas: st.rodadas, letra: st.fase === "contagem" ? null : st.letra, cats: st.cats, fim: st.fim, jogando: st.pts[pid] !== undefined, quemParou: st.quemParou ? nome(st.quemParou) : null, placar: this._placar(st) };
+    const v = { juiz: st.juiz, semJuiz: st.cats.map((c) => !CHECAVEIS.includes(c)), maioria: this._maioria(st), fase: st.fase, r: st.r, rodadas: st.rodadas, letra: st.fase === "contagem" ? null : st.letra, cats: st.cats, fim: st.fim, jogando: st.pts[pid] !== undefined, quemParou: st.quemParou ? nome(st.quemParou) : null, placar: this._placar(st) };
     if (v.jogando) v.minhas = st.resp[pid];
     const linha = (p, c) => {
       const k = p.id + ":" + c, v0 = norm(st.resp[p.id][c]);
